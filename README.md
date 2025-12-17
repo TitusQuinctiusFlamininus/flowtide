@@ -1,7 +1,7 @@
 # flowtide
 <img src="https://github.com/TitusQuinctiusFlamininus/flowtide/blob/main/images/flowtide.png" width="400" height="400">
 
-An open-source application that helps track [tdd](https://en.wikipedia.org/wiki/Test-driven_development) progress. Once the kata or exercise is done, one can review key points in time in code creation, both for tests and production-code.
+An open-source application that helps track [tdd](https://en.wikipedia.org/wiki/Test-driven_development) progress. Once the kata or exercise is done, one can review key points in time in code creation, for both tests and production-code.
 
 Many aspects can be seen in the review; here are a few: 
 - see if production code was written without tests (major violation)
