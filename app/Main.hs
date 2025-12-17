@@ -1,6 +1,6 @@
 module Main (main) where
 
-import Lib
-
 main :: IO ()
-main = someFunc
+main = do 
+    putStrLn "Enter the Test Code Directory to monitor: "
+    getLine >>= \tdir -> putStrLn ("Test Code Directory: "++tdir)

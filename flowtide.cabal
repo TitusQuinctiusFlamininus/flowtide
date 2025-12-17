@@ -24,8 +24,6 @@ source-repository head
   location: https://github.com/githubuser/flowtide
 
 library
-  exposed-modules:
-      Lib
   other-modules:
       Paths_flowtide
   autogen-modules:
@@ -55,6 +53,8 @@ test-suite flowtide-test
   type: exitcode-stdio-1.0
   main-is: Spec.hs
   other-modules:
+      Experiment.ProdCode.Prod1
+      Experiment.TestCode.Test1
       Paths_flowtide
   autogen-modules:
       Paths_flowtide
