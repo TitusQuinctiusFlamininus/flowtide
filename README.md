@@ -1,5 +1,5 @@
 # flowtide
-<img src="https://github.com/TitusQuinctiusFlamininus/flowtide/blob/main/images/flowtide.png" width="600" height="400">
+<img src="https://github.com/TitusQuinctiusFlamininus/flowtide/blob/main/images/flowtide.png" width="400" height="400">
 
 An open-source application that helps track tdd progress. Once the kata or exercise is done, one can review key points in time in code creation, both for tests and production-code.
 
