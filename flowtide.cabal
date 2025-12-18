@@ -24,20 +24,26 @@ source-repository head
   location: https://github.com/githubuser/flowtide
 
 library
+  exposed-modules:
+      Filescan
+      Main
   other-modules:
       Paths_flowtide
   autogen-modules:
       Paths_flowtide
   hs-source-dirs:
-      src
+      app
   ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-export-lists -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints
   build-depends:
       base >=4.7 && <5
+    , pipes
+    , time
   default-language: Haskell2010
 
 executable flowtide-exe
   main-is: Main.hs
   other-modules:
+      Filescan
       Paths_flowtide
   autogen-modules:
       Paths_flowtide
@@ -47,6 +53,8 @@ executable flowtide-exe
   build-depends:
       base >=4.7 && <5
     , flowtide
+    , pipes
+    , time
   default-language: Haskell2010
 
 test-suite flowtide-test
@@ -64,4 +72,6 @@ test-suite flowtide-test
   build-depends:
       base >=4.7 && <5
     , flowtide
+    , pipes
+    , time
   default-language: Haskell2010
