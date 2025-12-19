@@ -13,7 +13,7 @@ type OldContent   = [Char]
 
 -- SleepCount is the number of seconds to wait before rescanning the directory file for changes
 -- TDDFile is the file being scanned inside a directory, that might have changed during a TDD process
-scan :: SleepCount -> TDDFile -> Producer (NewContent, OldContent) IO ()
+scan :: SleepCount -> TDDFile -> Producer (NewContent, Maybe OldContent) IO ()
 scan sleep tfile = do
     modTime    <- lift $ getModificationTime tfile    
     oldModTime <- lift $ readLastRecordedModTime tfile
