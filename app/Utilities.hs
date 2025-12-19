@@ -1,6 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module Utilities (readLastRecordedModTime) where
+module Utilities (readLastRecordedModTime,
+                  readFileInDatabase) where
 
 import Data.Time.Clock
 import System.Directory
@@ -10,7 +11,12 @@ readLastRecordedModTime :: FilePath -> IO UTCTime
 readLastRecordedModTime = undefined
 
 
--- DATABASE CONNECTION UTILS
+-- DATABASE CONNECTION UTILS --
+
+readFileInDatabase :: FilePath -> IO [Char]
+readFileInDatabase = undefined
+
+
 getConnection :: IO Connection
 getConnection =
   connect $
