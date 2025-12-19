@@ -6,7 +6,6 @@ module Utilities (readLastRecordedModTime,
                   SleepCount) where
 
 import Data.Time.Clock
-import System.Directory
 import Database.PostgreSQL.Simple
 import qualified Control.Concurrent as C
 
