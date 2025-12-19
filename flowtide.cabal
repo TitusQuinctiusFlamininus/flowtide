@@ -26,6 +26,7 @@ source-repository head
 library
   exposed-modules:
       Filescan
+      Flowtypes
       Main
       Utilities
   other-modules:
@@ -47,6 +48,7 @@ executable flowtide-exe
   main-is: Main.hs
   other-modules:
       Filescan
+      Flowtypes
       Utilities
       Paths_flowtide
   autogen-modules:
