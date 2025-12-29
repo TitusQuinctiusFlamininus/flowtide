@@ -1,3 +1,4 @@
+{-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE OverloadedStrings #-}
 
 module Utilities (readLastRecordedModTime,
@@ -6,16 +7,28 @@ module Utilities (readLastRecordedModTime,
                   SleepCount) where
 
 import Flowtypes
+import Bluefin.IO
+import Bluefin.Eff
 import Bluefin.Stream
 import Database.PostgreSQL.Simple
 import qualified Control.Concurrent as C
 
+data FlowTideE e = FlowTide (IOE e) (Stream [Char] e)
 
 
+-- DATABASE UTILS --
 
-data FlowTideE e = FlowTide (Stream [Char] e)
+readFileInDatabase :: (e :> es) => FlowTideE e -> Eff es ()
+readFileInDatabase (FlowTide i s) = do 
+  conn <- getConnection
+  _ <- execute conn tableCreateSql [fname :: [Char]]
+  qresult <- query conn sqlContentSelect [fname :: [Char]]
+  case (listToMaybe qresult) of
+    Nothing  -> return Nothing
+    Just r   -> return . Just $ content r
 
--- GENERAL UTILS
+
+  -- GENERAL UTILS
 listToMaybe :: [a] -> Maybe a
 listToMaybe []    = Nothing
 listToMaybe (x:_) = Just x
@@ -27,20 +40,6 @@ hibernate ::  SleepCount -> IO ()
 hibernate sleep = C.threadDelay (sleep*1000000)
 
 
-
--- DATABASE UTILS --
-
-readFileInDatabase :: FileName -> IO (Maybe Content)
-readFileInDatabase fname = do 
-  conn <- getConnection
-  _ <- execute conn tableCreateSql [fname :: [Char]]
-  qresult <- query conn sqlContentSelect [fname :: [Char]]
-  case (listToMaybe qresult) of
-    Nothing  -> return Nothing
-    Just r   -> return . Just $ content r
-
-
-  
 
 getConnection :: IO Connection
 getConnection =
