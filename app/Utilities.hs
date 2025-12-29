@@ -6,9 +6,14 @@ module Utilities (readLastRecordedModTime,
                   SleepCount) where
 
 import Flowtypes
+import Bluefin.Stream
 import Database.PostgreSQL.Simple
 import qualified Control.Concurrent as C
 
+
+
+
+data FlowTideE e = FlowTide (Stream [Char] e)
 
 -- GENERAL UTILS
 listToMaybe :: [a] -> Maybe a
