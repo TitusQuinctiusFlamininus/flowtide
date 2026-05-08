@@ -1,0 +1,23 @@
+{
+  "name": "tdd-telemetry-backend",
+  "version": "1.0.0",
+  "scripts": {
+    "dev": "nodemon --exec ts-node src/server.ts"
+  },
+  "dependencies": {
+    "better-sqlite3": "^9.0.0",
+    "chokidar": "^3.6.0",
+    "diff": "^5.2.0",
+    "execa": "^8.0.1",
+    "tree-sitter": "^0.21.0",
+    "tree-sitter-typescript": "^0.23.2",
+    "typhonjs-escomplex": "^0.1.0",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "nodemon": "^3.1.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.4.0"
+  }
+}
