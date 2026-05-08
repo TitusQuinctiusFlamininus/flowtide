@@ -8,6 +8,8 @@ The app is split into:
 - `backend/` - watches files, analyzes changes, runs tests, stores events in SQLite, and publishes updates over WebSocket
 - `frontend/` - renders the live dashboard with charts, recent cycles, pass/fail state, and summary data
 
+The project is under an MIT License. See the License file for more details.
+
 ## Basic Requirements
 
 Install these before using the app:
