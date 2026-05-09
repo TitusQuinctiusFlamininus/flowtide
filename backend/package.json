@@ -2,7 +2,9 @@
   "name": "tdd-telemetry-backend",
   "version": "1.0.0",
   "scripts": {
-    "dev": "nodemon --exec ts-node src/server.ts"
+    "dev": "nodemon --exec ts-node src/server.ts",
+    "dev:local": "nodemon --exec ts-node src/server.ts --host localhost --port 8080",
+    "dev:public": "nodemon --exec ts-node src/server.ts --host 0.0.0.0 --port 9090"
   },
   "dependencies": {
     "better-sqlite3": "^9.0.0",

@@ -1,14 +1,130 @@
 # Flowtide
-![Flowtide dashboard in light mode](images/dark_theme_flowtide.png)
 
 Flowtide is a TDD telemetry tool that watches a codebase, analyzes source changes, runs that codebase's tests, and streams live metrics into a React dashboard.
+
+![Flowtide dashboard in light mode](images/light_theme_flowtide.png)
 
 The app is split into:
 
 - `backend/` - watches files, analyzes changes, runs tests, stores events in SQLite, and publishes updates over WebSocket
 - `frontend/` - renders the live dashboard with charts, recent cycles, pass/fail state, and summary data
 
-The project is under an MIT License. See the License file for more details.
+## Dashboard Metrics
+
+Flowtide exposes two kinds of metrics in the frontend:
+
+- per-cycle code and test metrics in the Test Code and Production Code charts
+- higher-level telemetry panels that summarize session patterns and engineering signals
+
+These values are mostly heuristics. They are intended to help you spot patterns, regressions, and risky trends quickly rather than serve as strict scientific measurements.
+
+### Main code charts
+
+The top row contains Test Code and Production Code charts. You can toggle individual series on and off in the UI.
+
+Available chart metrics:
+
+- Complexity: aggregate complexity score for the cycle
+- LOC Added: lines added in that cycle
+- LOC Removed: lines removed in that cycle
+- Total LOC: total observed lines of code after that cycle
+- Functions: number of discovered functions or methods
+- Conditionals: number of conditional branches such as `if`, `else`, or similar control-flow points
+- Classes: number of discovered classes or class-like structures
+- Files Changed: approximate number of files touched in that cycle
+- Pass Rate %: percentage of passing tests in that cycle
+- Halstead Volume: a size-and-operator based complexity estimate; higher values usually mean more mental load to understand the code
+- Maintainability (MI): a maintainability estimate derived from complexity and code volume; higher is generally better
+- Nesting Depth: how deeply logic is nested; higher values often signal harder-to-follow code
+- Max Params: the highest parameter count seen in a function or method for the cycle
+- Test Duration (ms): elapsed test runtime captured for the cycle
+- Test/Prod Ratio ×100: ratio of test LOC to production LOC, scaled by 100 for display
+
+### Flow State Telemetry
+
+Flow State Telemetry estimates how stable and focused the current development session feels.
+
+Metrics shown:
+
+- Flow Score: blended score derived from the flow-state signals below
+- Focused For: estimated uninterrupted coding streak based on recent event timing
+- Context Switches: switches between test-oriented and production-oriented work; lower is usually better
+- File Hopping: filename changes per minute; high values can indicate thrashing or fragmented attention
+- Test Cadence: average time between test-bearing cycles; helps show whether feedback loops are tight or drifting
+
+Interpretation:
+
+- higher flow score usually means steadier, more focused work
+- lower context switching and lower file hopping usually indicate better continuity
+- cadence that stays relatively regular suggests a healthier test-feedback loop
+
+### Refactoring Telemetry
+
+Refactoring Telemetry estimates how much cleanup and structural improvement is happening across visible cycles.
+
+Metrics shown:
+
+- Refactor Density: weighted heuristic of refactor signals normalized by visible cycle count
+- Renames: likely rename events inferred from filenames and event text
+- Moves: likely file or symbol relocation events
+- Extraction: likely extraction behavior, for example pulling logic into a helper or method
+- Simplification: likely complexity-reducing changes between cycles
+- Deletion-Heavy: cycles where removals significantly outweighed additions
+- Code Removed: average removed LOC per cycle, with total removed LOC shown in helper text
+- Complexity Reduced: delta between earlier and later complexity levels; negative values mean complexity decreased
+- Detection Density: alternate view of refactor signal intensity
+
+Interpretation:
+
+- higher density suggests more structural change activity
+- more simplification and extraction signals often indicate active cleanup work
+- frequent deletion-heavy cycles may be healthy cleanup, but repeated spikes can also signal churn
+
+### Architectural Drift Telemetry
+
+Architectural Drift Telemetry highlights structural pressure building across recent cycles.
+
+Metrics shown:
+
+- Dependency Entropy: coarse overall drift level derived from dependency growth, circular risk, and volatility
+- Avg Coupling: average estimated coupling pressure across visible cycles
+- Dependency Growth: trend showing whether code volume and connectedness are expanding faster than they are being simplified
+- Circular Risk: heuristic estimate of how likely the recent shape of the codebase is to create circular dependency pressure
+- Module Coupling: chart series showing how tightly functionality appears packed per cycle
+- Circular References: chart series showing estimated circularity risk over time
+- Import Graph Evolution: chart series approximating how the project’s dependency graph is spreading over time
+
+Interpretation:
+
+- low entropy suggests the architecture is relatively stable
+- rising coupling and circular risk can be an early warning that changes are becoming harder to isolate
+- growing import graph values can indicate increasing structural sprawl
+
+### Cognitive Load Estimation
+
+Cognitive Load Estimation is a heuristic attempt to approximate how mentally demanding the current work session may be.
+
+Metrics shown:
+
+- Cognitive Load %: overall blended estimate of current mental load
+- Branching Complexity: combines conditionals, complexity, and nesting from recent events
+- Simultaneous Files: count of distinct recently touched files
+- Edit Frequency: amount of recent code churn based on added and removed LOC
+- Navigation Thrashing: combination of file hopping and repeated revisits to the same files
+
+Treemap tiles break the score into its major contributing factors so you can see what is driving the estimate.
+
+Interpretation:
+
+- low load usually means work is localized and comparatively stable
+- high load can suggest elevated branching, lots of file context, or rapid navigation between files
+- this metric is directional only; it is meant to surface risk of confusion or TDD drift, not to judge productivity
+
+### Other Helpful Metrics View
+
+This view highlights the lower telemetry area (including cognitive load and additional bottom metrics panels) so you can quickly identify where these supporting signals are displayed in the dashboard.
+
+![Flowtide other helpful metrics view](images/other_helpful_metrics_flowtide.png)
 
 ## Basic Requirements
 
@@ -380,7 +496,8 @@ Notes:
 ## Notes And Limitations
 
 - The backend expects a real filesystem path as its argument
-- The frontend expects the backend WebSocket server on `ws://localhost:8080`
+- By default the backend listens on `ws://localhost:8080`, but host and port can be overridden
+- By default the frontend dev server runs on `http://localhost:5173`, but host and port can be overridden
 - Only files supported by the registered language adapters will produce source metrics
 - Test execution depends on the watched project's own test command and installed toolchain
 - Ignored directories include `node_modules`, `target`, `bin`, `obj`, `dist`, and `build`
@@ -393,12 +510,64 @@ npm install
 npm run dev -- /absolute/path/to/your/project
 ```
 
+Optional backend host and port overrides:
+
+```bash
+cd backend
+npm run dev -- /absolute/path/to/your/project --host localhost --port 8080
+npm run dev -- /absolute/path/to/your/project --host 0.0.0.0 --port 9090
+```
+
+Shortcut scripts for the common backend modes:
+
+```bash
+cd backend
+npm run dev:local -- /absolute/path/to/your/project
+npm run dev:public -- /absolute/path/to/your/project
+```
+
+You can also use environment variables:
+
+```bash
+TELEMETRY_HOST=0.0.0.0 TELEMETRY_PORT=9090 npm run dev -- /absolute/path/to/your/project
+```
+
 In another terminal:
 
 ```bash
 cd frontend
 npm install
 npm run dev
+```
+
+Optional frontend dev server host and port overrides:
+
+```bash
+cd frontend
+FRONTEND_HOST=localhost FRONTEND_PORT=5173 npm run dev
+FRONTEND_HOST=0.0.0.0 FRONTEND_PORT=4173 npm run dev
+```
+
+Shortcut scripts for the common frontend modes:
+
+```bash
+cd frontend
+npm run dev:local
+npm run dev:public
+```
+
+The frontend connects to the backend WebSocket using these defaults unless you override them:
+
+- backend host: `localhost`
+- backend port: `8080`
+
+Example backend connection overrides for the frontend:
+
+```bash
+cd frontend
+VITE_BACKEND_HOST=localhost VITE_BACKEND_PORT=8080 npm run dev
+VITE_BACKEND_HOST=192.168.1.50 VITE_BACKEND_PORT=9090 npm run dev
+VITE_BACKEND_WS_URL=ws://192.168.1.50:9090 npm run dev
 ```
 
 Then open `http://localhost:5173`.
