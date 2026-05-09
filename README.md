@@ -3,6 +3,7 @@
 Flowtide is a TDD telemetry tool that watches a codebase, analyzes source changes, runs that codebase's tests, and streams live metrics into a React dashboard.
 
 ![Flowtide dashboard in light mode](images/light_theme_flowtide.png)
+![Flowtide dashboard other metrics](images/other_helpful_metrics_flowtide.png)
 
 The app is split into:
 
