@@ -121,12 +121,6 @@ Interpretation:
 - high load can suggest elevated branching, lots of file context, or rapid navigation between files
 - this metric is directional only; it is meant to surface risk of confusion or TDD drift, not to judge productivity
 
-### Other Helpful Metrics View
-
-This view highlights the lower telemetry area (including cognitive load and additional bottom metrics panels) so you can quickly identify where these supporting signals are displayed in the dashboard.
-
-![Flowtide other helpful metrics view](images/other_helpful_metrics_flowtide.png)
-
 ## Basic Requirements
 
 Install these before using the app:
