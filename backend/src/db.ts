@@ -51,7 +51,17 @@ CREATE TABLE IF NOT EXISTS events (
   prod_nesting_depth INTEGER DEFAULT 0,
   prod_max_params INTEGER DEFAULT 0,
   test_file_count INTEGER DEFAULT 0,
-  prod_file_count INTEGER DEFAULT 0
+  prod_file_count INTEGER DEFAULT 0,
+  mutation_status TEXT DEFAULT 'queued',
+  mutation_targets INTEGER DEFAULT 0,
+  mutation_killed INTEGER DEFAULT 0,
+  mutation_survived INTEGER DEFAULT 0,
+  mutation_timeout INTEGER DEFAULT 0,
+  mutation_score INTEGER DEFAULT 0,
+  mutation_pipeline_ms INTEGER DEFAULT 0,
+  mutation_adapter TEXT DEFAULT '',
+  mutation_stream_events INTEGER DEFAULT 0,
+  mutation_stable_keys INTEGER DEFAULT 0
 )
 `);
 
@@ -96,6 +106,16 @@ const newCols: Record<string, string> = {
   prod_nesting_depth: "INTEGER DEFAULT 0",
   prod_max_params: "INTEGER DEFAULT 0",
   tests_duration_ms: "INTEGER DEFAULT 0",
+  mutation_status: "TEXT DEFAULT 'queued'",
+  mutation_targets: "INTEGER DEFAULT 0",
+  mutation_killed: "INTEGER DEFAULT 0",
+  mutation_survived: "INTEGER DEFAULT 0",
+  mutation_timeout: "INTEGER DEFAULT 0",
+  mutation_score: "INTEGER DEFAULT 0",
+  mutation_pipeline_ms: "INTEGER DEFAULT 0",
+  mutation_adapter: "TEXT DEFAULT ''",
+  mutation_stream_events: "INTEGER DEFAULT 0",
+  mutation_stable_keys: "INTEGER DEFAULT 0",
 };
 for (const [col, type] of Object.entries(newCols)) {
   if (!existingCols.includes(col)) {

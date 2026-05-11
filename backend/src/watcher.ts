@@ -2,6 +2,8 @@ import chokidar from "chokidar";
 
 import { analyzeFile }
   from "./analyzer";
+import { isPathMutationSuppressed }
+  from "./mutation/runtimeGuards";
 
 export function startWatcher(
   targetPath: string
@@ -22,6 +24,9 @@ export function startWatcher(
   watcher.on(
     "change",
     async (path) => {
+      if (isPathMutationSuppressed(path)) {
+        return;
+      }
 
       console.log("Changed:", path);
 
@@ -32,6 +37,9 @@ export function startWatcher(
   watcher.on(
     "add",
     async (path) => {
+      if (isPathMutationSuppressed(path)) {
+        return;
+      }
 
       console.log("Added:", path);
 

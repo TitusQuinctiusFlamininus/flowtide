@@ -16,6 +16,10 @@ import { broadcast }
   from "./websocket";
 
 import { runTests } from "./test-runners/runTests";
+import {
+  enqueueMutationTesting,
+  type MutationSummary,
+} from "./mutation/runMutationTesting";
 
 let cycleCounter = 0;
 let flushTimer: NodeJS.Timeout | null = null;
@@ -49,6 +53,39 @@ interface PendingState {
     test: BucketState;
     production: BucketState;
   };
+}
+
+function createMutationSummary(overrides: Partial<MutationSummary> = {}): MutationSummary {
+  return {
+    mutation_status: "queued",
+    mutation_targets: 0,
+    mutation_killed: 0,
+    mutation_survived: 0,
+    mutation_timeout: 0,
+    mutation_score: 0,
+    mutation_pipeline_ms: 0,
+    mutation_adapter: "",
+    mutation_stream_events: 0,
+    mutation_stable_keys: 0,
+    ...overrides,
+  };
+}
+
+function persistMutationSummary(cycle: number, summary: MutationSummary) {
+  db.prepare(`
+    UPDATE events
+    SET mutation_status = @mutation_status,
+        mutation_targets = @mutation_targets,
+        mutation_killed = @mutation_killed,
+        mutation_survived = @mutation_survived,
+        mutation_timeout = @mutation_timeout,
+        mutation_score = @mutation_score,
+        mutation_pipeline_ms = @mutation_pipeline_ms,
+        mutation_adapter = @mutation_adapter,
+        mutation_stream_events = @mutation_stream_events,
+        mutation_stable_keys = @mutation_stable_keys
+    WHERE cycle = @cycle
+  `).run({ cycle, ...summary });
 }
 
 function createBucket(): BucketState {
@@ -205,6 +242,9 @@ async function flushCycle() {
     tests_total: testRun.total,
     tests_duration_ms: testRun.duration_ms,
     new_tests: JSON.stringify([...snapshot.newTests]),
+    ...createMutationSummary({
+      mutation_status: snapshot.byCategory.production.files.size > 0 ? "queued" : "skipped",
+    }),
   };
 
   db.prepare(`
@@ -255,7 +295,17 @@ async function flushCycle() {
       prod_nesting_depth,
       prod_max_params,
       test_file_count,
-      prod_file_count
+      prod_file_count,
+      mutation_status,
+      mutation_targets,
+      mutation_killed,
+      mutation_survived,
+      mutation_timeout,
+      mutation_score,
+      mutation_pipeline_ms,
+      mutation_adapter,
+      mutation_stream_events,
+      mutation_stable_keys
     )
     VALUES (
       @timestamp,
@@ -304,11 +354,35 @@ async function flushCycle() {
       @prod_nesting_depth,
       @prod_max_params,
       @test_file_count,
-      @prod_file_count
+      @prod_file_count,
+      @mutation_status,
+      @mutation_targets,
+      @mutation_killed,
+      @mutation_survived,
+      @mutation_timeout,
+      @mutation_score,
+      @mutation_pipeline_ms,
+      @mutation_adapter,
+      @mutation_stream_events,
+      @mutation_stable_keys
     )
   `).run(event);
 
   broadcast({ ...event, new_tests: [...snapshot.newTests] });
+
+  void enqueueMutationTesting({
+    cycle: cycleCounter,
+    filePaths: [...snapshot.byCategory.production.files.keys()],
+    onUpdate: ({ cycle, summary, mutation }) => {
+      persistMutationSummary(cycle, summary);
+      broadcast({
+        type: "mutation_update",
+        cycle,
+        summary,
+        mutation,
+      });
+    },
+  });
 }
 
 export async function analyzeFile(filePath: string) {

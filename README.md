@@ -3,7 +3,6 @@
 Flowtide is a TDD telemetry tool that watches a codebase, analyzes source changes, runs that codebase's tests, and streams live metrics into a React dashboard.
 
 ![Flowtide dashboard in light mode](images/light_theme_flowtide.png)
-![Flowtide dashboard other metrics](images/other_helpful_metrics_flowtide.png)
 
 The app is split into:
 
@@ -43,6 +42,8 @@ Available chart metrics:
 
 ### Flow State Telemetry
 
+![Flow State Telemetry](images/flow_score_flowtide.png)
+
 Flow State Telemetry estimates how stable and focused the current development session feels.
 
 Metrics shown:
@@ -60,6 +61,8 @@ Interpretation:
 - cadence that stays relatively regular suggests a healthier test-feedback loop
 
 ### Refactoring Telemetry
+
+![Refactor Telemetry](images/refactor_density_flowtide.png)
 
 Refactoring Telemetry estimates how much cleanup and structural improvement is happening across visible cycles.
 
@@ -83,6 +86,8 @@ Interpretation:
 
 ### Architectural Drift Telemetry
 
+![Architectural Telemetry](images/dep_entropy_flowtide.png)
+
 Architectural Drift Telemetry highlights structural pressure building across recent cycles.
 
 Metrics shown:
@@ -103,6 +108,8 @@ Interpretation:
 
 ### Cognitive Load Estimation
 
+![Cognitive Load Telemetry](images/cog_load_estimate_flowtide.png)
+
 Cognitive Load Estimation is a heuristic attempt to approximate how mentally demanding the current work session may be.
 
 Metrics shown:
@@ -120,6 +127,36 @@ Interpretation:
 - low load usually means work is localized and comparatively stable
 - high load can suggest elevated branching, lots of file context, or rapid navigation between files
 - this metric is directional only; it is meant to surface risk of confusion or TDD drift, not to judge productivity
+
+### Mutation Testing
+
+![Mutation Testing](images/mutation_score_flowtide.png)
+
+Flowtide includes a mutation-testing pipeline that runs after each telemetry checkpoint cycle.
+
+At a high level:
+
+- Flowtide mutates production code using small operator-level changes (for example conditional and boolean flips)
+- it reruns the project test suite for each generated mutant
+- it classifies outcomes as:
+
+	- killed: tests failed after mutation (strong test detection)
+	- survived: tests still passed after mutation (potentially weak test coverage)
+	- timeout: mutation run produced no usable test result
+
+The dashboard includes a Mutation Testing panel directly below the Test Code and Production Code charts.
+
+Metrics shown:
+
+- Mutation Score: percentage of killed mutants for the latest cycle
+- Killed: killed mutant count for the latest cycle
+- Survived: survived mutant count for the latest cycle
+- Trend chart: per-cycle mutation score plus killed/survived/timeout series
+- Live Mutation Stream: survived mutation entries (only) with file, operator, cycle, and test result context
+
+Common mutation operators across supported language adapters include equality flips (`==`/`!=`, plus strict equality where available), relational flips (`>=`/`<`, `<=`/`>`), logical operator flips (`&&`/`||` or `and`/`or`), boolean literal flips (`true`/`false` or `True`/`False`), and null-check flips where language syntax supports them.
+
+Operator sets are intentionally small and reversible to keep mutation runs fast and stable.
 
 ## Basic Requirements
 
@@ -159,6 +196,9 @@ It also includes source analyzers for these languages:
 - Elm
 - Kotlin
 - Swift
+
+Mutation testing currently includes explicit adapters for the same list of languages.
+
 
 ## Extending Flowtide
 
@@ -242,6 +282,23 @@ In practice:
 
 - If Flowtide can analyze the files but cannot run that project's tests, you will get code metrics but weak or empty pass/fail telemetry.
 - If Flowtide can run tests but has no adapter for the file type, test totals may work but source metrics for those files will be missing.
+
+### How to add a new mutation adapter
+
+Mutation adapters are separate from language analysis adapters and test runners.
+
+To add mutation support for a new language:
+
+1. Create a mutation adapter in `backend/src/mutation/adapters/` that implements `MutationAdapter` from `backend/src/mutation/types.ts`.
+2. Add the adapter to `backend/src/mutation/registry.ts`.
+3. Generate stable mutation keys and small, reversible edits (`start`, `end`, `original`, `replacement`).
+4. Limit candidate count per file/cycle to keep runtime practical.
+5. Verify websocket `mutation_update` messages and panel output in the frontend.
+
+Adapter contract summary:
+
+- `supports(filePath)` - decides whether the adapter owns that file
+- `createMutations({ filePath, code, language })` - returns mutation candidates with operator metadata and reversible edit ranges
 
 ### Recommended workflow for adding support
 

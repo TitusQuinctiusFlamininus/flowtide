@@ -69,6 +69,16 @@ interface TelemetryEvent {
   prod_nesting_depth?: number;
   prod_max_params?: number;
   tests_duration_ms?: number;
+  mutation_status?: "queued" | "running" | "completed" | "skipped";
+  mutation_targets?: number;
+  mutation_killed?: number;
+  mutation_survived?: number;
+  mutation_timeout?: number;
+  mutation_score?: number;
+  mutation_pipeline_ms?: number;
+  mutation_adapter?: string;
+  mutation_stream_events?: number;
+  mutation_stable_keys?: number;
 }
 
 interface ChartPoint {
@@ -153,9 +163,65 @@ interface CognitiveLoadMetrics {
   treemapData: Array<{ name: string; size: number; value: number; }>;
 }
 
+interface MutationActivity {
+  key: string;
+  cycle: number;
+  adapter: string;
+  operator: string;
+  file: string;
+  line: number;
+  column: number;
+  status: "running" | "killed" | "survived" | "timeout";
+  duration_ms?: number;
+  tests_passed?: number;
+  tests_failed?: number;
+  tests_total?: number;
+  receivedAt: number;
+}
+
+interface MutationTestingMetrics {
+  mutationScore: number;
+  avgScore: number;
+  queueState: "queued" | "running" | "completed" | "skipped" | "idle";
+  totalTargets: number;
+  killed: number;
+  survived: number;
+  timedOut: number;
+  pipelineMs: number;
+  adapterLabel: string;
+  streamEvents: number;
+  stableKeys: number;
+  trend: Array<{
+    cycle: number;
+    score: number;
+    killed: number;
+    survived: number;
+  }>;
+  activity: MutationActivity[];
+}
+
 interface SnapshotMessage {
   type: "snapshot";
   events: TelemetryEvent[];
+}
+
+interface MutationUpdateMessage {
+  type: "mutation_update";
+  cycle: number;
+  summary: Pick<
+    TelemetryEvent,
+    | "mutation_status"
+    | "mutation_targets"
+    | "mutation_killed"
+    | "mutation_survived"
+    | "mutation_timeout"
+    | "mutation_score"
+    | "mutation_pipeline_ms"
+    | "mutation_adapter"
+    | "mutation_stream_events"
+    | "mutation_stable_keys"
+  >;
+  mutation?: Omit<MutationActivity, "cycle" | "receivedAt">;
 }
 
 type ThemeMode = "dark" | "light";
@@ -206,18 +272,18 @@ const COLORS = {
 
 const METRICS_CONFIG = [
   { key: "complexity",   label: "Complexity",    color: "#f59e0b", defaultOn: true,  prodOnly: true },
-  { key: "loc_added",    label: "LOC Added",     color: "#3b82f6", defaultOn: true  },
+  { key: "loc_added",    label: "LOC Added",     color: "#2563eb", defaultOn: true  },
   { key: "loc_total",    label: "Total LOC",     color: "#14b8a6", defaultOn: true  },
-  { key: "functions",    label: "Functions",     color: "#ef4444", defaultOn: true,  prodOnly: true },
-  { key: "conditionals", label: "Conditionals",  color: "#a855f7", defaultOn: false, prodOnly: true },
-  { key: "classes",      label: "Classes",       color: "#06b6d4", defaultOn: false, prodOnly: true },
-  { key: "loc_removed",  label: "LOC Removed",   color: "#f97316", defaultOn: false },
-  { key: "file_count",   label: "Files Changed", color: "#84cc16", defaultOn: false },
-  { key: "pass_rate",              label: "Pass Rate %",          color: "#10b981", defaultOn: false, testOnly: true  },
-  { key: "halstead_volume",        label: "Halstead Volume",      color: "#6366f1", defaultOn: false, prodOnly: true  },
-  { key: "maintainability_index",  label: "Maintainability (MI)", color: "#22c55e", defaultOn: false, prodOnly: true  },
-  { key: "nesting_depth",          label: "Nesting Depth",        color: "#f43f5e", defaultOn: false, prodOnly: true  },
-  { key: "max_params",             label: "Max Params",           color: "#fb923c", defaultOn: false, prodOnly: true  },
+  { key: "functions",    label: "Functions",     color: "#dc2626", defaultOn: true,  prodOnly: true },
+  { key: "conditionals", label: "Conditionals",  color: "#7c3aed", defaultOn: false, prodOnly: true },
+  { key: "classes",      label: "Classes",       color: "#db2777", defaultOn: false, prodOnly: true },
+  { key: "loc_removed",  label: "LOC Removed",   color: "#ea580c", defaultOn: false },
+  { key: "file_count",   label: "Files Changed", color: "#65a30d", defaultOn: false },
+  { key: "pass_rate",              label: "Pass Rate %",          color: "#8b5cf6", defaultOn: false, testOnly: true  },
+  { key: "halstead_volume",        label: "Halstead Volume",      color: "#4338ca", defaultOn: false, prodOnly: true  },
+  { key: "maintainability_index",  label: "Maintainability (MI)", color: "#16a34a", defaultOn: false, prodOnly: true  },
+  { key: "nesting_depth",          label: "Nesting Depth",        color: "#e11d48", defaultOn: false, prodOnly: true  },
+  { key: "max_params",             label: "Max Params",           color: "#0891b2", defaultOn: false, prodOnly: true  },
   { key: "tests_duration_ms",      label: "Test Duration (ms)",   color: "#e879f9", defaultOn: false, testOnly: true  },
   { key: "test_ratio",             label: "Test/Prod Ratio ×100", color: "#fbbf24", defaultOn: false, testOnly: true  },
 ] as const;
@@ -653,6 +719,64 @@ function computeCognitiveLoadTelemetry(events: TelemetryEvent[], cycleEvents: Te
     editScore,
     thrashScore,
     treemapData,
+  };
+}
+
+function computeMutationTestingTelemetry(cycleEvents: TelemetryEvent[], activity: MutationActivity[]): MutationTestingMetrics {
+  const mutationCycles = cycleEvents
+    .filter((event) => (
+      (event.mutation_targets ?? 0) > 0
+      || (event.mutation_status ?? "idle") !== "idle"
+      || (event.mutation_stream_events ?? 0) > 0
+    ));
+
+  if (mutationCycles.length === 0) {
+    return {
+      mutationScore: 0,
+      avgScore: 0,
+      queueState: "idle",
+      totalTargets: 0,
+      killed: 0,
+      survived: 0,
+      timedOut: 0,
+      pipelineMs: 0,
+      adapterLabel: "No adapter active",
+      streamEvents: 0,
+      stableKeys: 0,
+      trend: [],
+      activity,
+    };
+  }
+
+  const latest = mutationCycles[0];
+  const latestCycle = latest.cycle;
+  const currentCycleActivity = activity.filter((item) => item.cycle === latestCycle);
+  const avgScore = Math.round(
+    mutationCycles.reduce((sum, event) => sum + (event.mutation_score ?? 0), 0)
+    / Math.max(1, mutationCycles.length)
+  );
+
+  return {
+    mutationScore: latest.mutation_score ?? 0,
+    avgScore,
+    queueState: latest.mutation_status ?? "idle",
+    totalTargets: latest.mutation_targets ?? 0,
+    killed: latest.mutation_killed ?? 0,
+    survived: latest.mutation_survived ?? 0,
+    timedOut: latest.mutation_timeout ?? 0,
+    pipelineMs: latest.mutation_pipeline_ms ?? 0,
+    adapterLabel: latest.mutation_adapter || "No adapter active",
+    streamEvents: latest.mutation_stream_events ?? 0,
+    stableKeys: latest.mutation_stable_keys ?? 0,
+    trend: [...mutationCycles]
+      .sort((a, b) => (a.cycle ?? 0) - (b.cycle ?? 0))
+      .map((event) => ({
+        cycle: event.cycle,
+        score: event.mutation_score ?? 0,
+        killed: event.mutation_killed ?? 0,
+        survived: event.mutation_survived ?? 0,
+      })),
+    activity: currentCycleActivity,
   };
 }
 
@@ -1367,8 +1491,8 @@ function ArchitecturalDriftPanel({ telemetry, theme }: { telemetry: Architectura
 
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
         {[
-          { label: "Avg Coupling", value: telemetry.avgCoupling, color: "#38bdf8" },
-          { label: "Dependency Growth", value: telemetry.avgDependencyGrowth, color: "#0ea5e9" },
+          { label: "Avg Coupling", value: telemetry.avgCoupling, color: "#e879f9" },
+          { label: "Dependency Growth", value: telemetry.avgDependencyGrowth, color: "#22c55e" },
           { label: "Circular Risk", value: telemetry.circularRisk, color: "#f97316" },
         ].map((m) => (
           <span
@@ -1400,8 +1524,7 @@ function ArchitecturalDriftPanel({ telemetry, theme }: { telemetry: Architectura
             <Legend wrapperStyle={{ fontSize: 11, color: theme.textMuted }} />
             <Area type="monotone" dataKey="module_coupling" name="Module Coupling" stroke="#e879f9" fill="#e879f938" strokeWidth={2} />
             <Area type="monotone" dataKey="dependency_growth" name="Dependency Growth" stroke="#22c55e" fill="#22c55e38" strokeWidth={2} />
-            <Area type="monotone" dataKey="circular_references" name="Circular References" stroke="#fb7185" fill="#fb718538" strokeWidth={2} />
-            <Area type="monotone" dataKey="import_graph" name="Import Graph Evolution" stroke="#facc15" fill="#facc1533" strokeWidth={2} />
+            <Area type="monotone" dataKey="circular_references" name="Circular Risk" stroke="#f97316" fill="#f9731638" strokeWidth={2} />
           </AreaChart>
         </ResponsiveContainer>
       )}
@@ -1517,11 +1640,14 @@ function CognitiveLoadPanel({ metrics, theme }: { metrics: CognitiveLoadMetrics;
           >
             <Tooltip 
               contentStyle={{
-                background: theme.surface,
-                border: `1px solid ${theme.border}`,
+                background: isDark ? "#0b1220" : theme.surface,
+                border: `1px solid ${isDark ? "#334155" : theme.border}`,
                 borderRadius: 6,
                 fontSize: 12,
+                color: isDark ? "#ffffff" : "#0f172a",
               }}
+              labelStyle={{ color: isDark ? "#ffffff" : "#0f172a" }}
+              itemStyle={{ color: isDark ? "#ffffff" : "#0f172a" }}
               formatter={(value: any) => `Score: ${Math.round(value)}`}
               labelFormatter={(label: any) => `${label}`}
             />
@@ -1532,9 +1658,185 @@ function CognitiveLoadPanel({ metrics, theme }: { metrics: CognitiveLoadMetrics;
   );
 }
 
+function MutationTestingPanel({ metrics, theme }: { metrics: MutationTestingMetrics; theme: ThemePalette }) {
+  const isDark = theme.appBg === "#0f172a";
+  const [showAllSurvivors, setShowAllSurvivors] = useState(false);
+  const killedColor = "#22c55e";
+  const survivedColor = "#ef4444";
+  const survivedTileColor = "#f97316";
+  const scoreColor = metrics.mutationScore >= 75 ? "#10b981" : metrics.mutationScore >= 45 ? "#f59e0b" : "#ef4444";
+  const queueColor = metrics.queueState === "completed"
+    ? "#10b981"
+    : metrics.queueState === "running"
+      ? "#38bdf8"
+      : metrics.queueState === "queued"
+        ? "#f59e0b"
+        : metrics.queueState === "skipped"
+          ? "#94a3b8"
+          : "#64748b";
+
+  const tile = (label: string, value: string, helper: string, color: string, emphasis = false) => (
+    <div
+      key={label}
+      style={{
+        background: isDark
+          ? `${color}${emphasis ? "2f" : "18"}`
+          : `${color}${emphasis ? "24" : "14"}`,
+        border: `1px solid ${color}${emphasis ? "88" : "44"}`,
+        borderRadius: 10,
+        padding: "12px 14px",
+        boxShadow: emphasis
+          ? (isDark ? `0 0 0 1px ${color}33, 0 0 16px ${color}44` : `0 0 0 1px ${color}22, 0 0 10px ${color}22`)
+          : "none",
+      }}
+    >
+      <div style={{ color, fontSize: 10, fontWeight: 900, textTransform: "uppercase", letterSpacing: 0.8 }}>{label}</div>
+      <div style={{ color: theme.text, fontSize: 18, fontWeight: 800, marginTop: 4 }}>{value}</div>
+      <div style={{ color: theme.textMuted, fontSize: 11, marginTop: 4 }}>{helper}</div>
+    </div>
+  );
+
+  return (
+    <div
+      style={{
+        background: theme.surface,
+        border: `1px solid ${theme.border}`,
+        borderRadius: 12,
+        padding: "12px 14px",
+        display: "flex",
+        flexDirection: "column",
+        gap: 8,
+      }}
+    >
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12 }}>
+        <div>
+          <div style={{ color: theme.textFaint, fontSize: 11, textTransform: "uppercase", letterSpacing: 0.8 }}>
+            Mutation Testing
+          </div>
+          <div style={{ color: theme.text, fontSize: 20, fontWeight: 900, marginTop: 3 }}>
+            Mutation Score: <span style={{ color: scoreColor }}>{metrics.mutationScore}%</span>
+          </div>
+        </div>
+        {metrics.queueState !== "skipped" && (
+          <div
+            style={{
+              background: `${queueColor}1a`,
+              border: `1px solid ${queueColor}55`,
+              color: queueColor,
+              borderRadius: 999,
+              padding: "4px 10px",
+              fontSize: 11,
+              fontWeight: 800,
+              textTransform: "uppercase",
+              letterSpacing: 0.7,
+            }}
+          >
+            {metrics.queueState}
+          </div>
+        )}
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 10 }}>
+        {tile("Killed", `${metrics.killed}/${Math.max(metrics.totalTargets, 1)}`, "Strong tests caught these mutants", killedColor, true)}
+        {tile("Survived", `${metrics.survived}`, "Weak tests let these pass", survivedTileColor, true)}
+      </div>
+
+      {metrics.trend.length === 0 ? (
+        <div style={{ color: theme.textFaint, fontSize: 13 }}>No mutation cycles yet.</div>
+      ) : (
+        <ResponsiveContainer width="100%" height={145}>
+          <AreaChart data={metrics.trend} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke={theme.borderSoft} />
+            <XAxis dataKey="cycle" tick={{ fill: theme.textFaint, fontSize: 10 }} stroke={theme.border} />
+            <YAxis tick={{ fill: theme.textFaint, fontSize: 10 }} stroke={theme.border} width={40} domain={[0, 100]} />
+            <Tooltip content={<CustomTooltip theme={theme} />} />
+            <Legend wrapperStyle={{ fontSize: 11, color: theme.textMuted }} />
+            <Area type="monotone" dataKey="score" name="Mutation Score" stroke="#22c55e" fill="#22c55e38" strokeWidth={2.5} />
+            <Area type="monotone" dataKey="killed" name="Killed" stroke="#ec4899" fill="#ec489938" strokeWidth={2} />
+            <Area type="monotone" dataKey="survived" name="Survived" stroke="#f97316" fill="#f9731638" strokeWidth={2} />
+          </AreaChart>
+        </ResponsiveContainer>
+      )}
+
+      <div>
+        <div style={{ color: theme.textFaint, fontSize: 11, textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 6 }}>
+          Live Mutation Stream
+        </div>
+        {(() => {
+          const survivors = metrics.activity.filter((item) => item.status === "survived");
+          const visibleSurvivors = showAllSurvivors ? survivors : survivors.slice(0, 2);
+
+          if (survivors.length === 0) {
+            return <div style={{ color: theme.textFaint, fontSize: 13 }}>No survived mutations yet.</div>;
+          }
+
+          return (
+            <>
+              <div style={{ display: "grid", gap: 8 }}>
+                {visibleSurvivors.map((item) => {
+                  const itemColor = survivedColor;
+
+                  return (
+                    <div
+                      key={`${item.cycle}-${item.key}-${item.status}`}
+                      style={{
+                        border: `1px solid ${itemColor}33`,
+                        background: isDark ? `${itemColor}10` : `${itemColor}0d`,
+                        borderRadius: 10,
+                        padding: "10px 12px",
+                      }}
+                    >
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
+                        <div style={{ color: theme.text, fontSize: 13, fontWeight: 700 }}>
+                          {item.operator} on {item.file}:{item.line}
+                        </div>
+                        <Badge label={item.status} color={itemColor} />
+                      </div>
+                      <div style={{ color: theme.textMuted, fontSize: 11, marginTop: 4 }}>
+                        {item.adapter} adapter · Cycle #{item.cycle}
+                        {typeof item.duration_ms === "number" ? ` · ${item.duration_ms} ms` : ""}
+                        {typeof item.tests_total === "number" && item.tests_total > 0
+                          ? ` · ${item.tests_failed ?? 0} failed / ${item.tests_passed ?? 0} passed`
+                          : ""}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {survivors.length > 2 && (
+                <button
+                  onClick={() => setShowAllSurvivors((prev) => !prev)}
+                  style={{
+                    marginTop: 10,
+                    width: "100%",
+                    background: theme.surfaceAlt,
+                    color: theme.textMuted,
+                    border: `1px solid ${theme.border}`,
+                    borderRadius: 8,
+                    padding: "8px 10px",
+                    cursor: "pointer",
+                    fontSize: 12,
+                    fontWeight: 600,
+                  }}
+                >
+                  {showAllSurvivors
+                    ? "Hide older survived mutations"
+                    : `Show all survived mutations (${survivors.length})`}
+                </button>
+              )}
+            </>
+          );
+        })()}
+      </div>
+    </div>
+  );
+}
+
 function App() {
   const [events, setEvents] = useState<TelemetryEvent[]>([]);
   const [chartData, setChartData] = useState<ChartData>({ test: [], production: [] });
+  const [mutationActivity, setMutationActivity] = useState<MutationActivity[]>([]);
   const [showOlderEvents, setShowOlderEvents] = useState(false);
   const [themeMode, setThemeMode] = useState<ThemeMode>(() => {
     const saved = localStorage.getItem("telemetry-theme");
@@ -1565,6 +1867,16 @@ function App() {
       new_tests: Array.isArray(raw.new_tests)
         ? raw.new_tests
         : (typeof raw.new_tests === "string" ? JSON.parse(raw.new_tests) : []),
+      mutation_status: raw.mutation_status ?? "queued",
+      mutation_targets: Number(raw.mutation_targets ?? 0),
+      mutation_killed: Number(raw.mutation_killed ?? 0),
+      mutation_survived: Number(raw.mutation_survived ?? 0),
+      mutation_timeout: Number(raw.mutation_timeout ?? 0),
+      mutation_score: Number(raw.mutation_score ?? 0),
+      mutation_pipeline_ms: Number(raw.mutation_pipeline_ms ?? 0),
+      mutation_adapter: raw.mutation_adapter ?? "",
+      mutation_stream_events: Number(raw.mutation_stream_events ?? 0),
+      mutation_stable_keys: Number(raw.mutation_stable_keys ?? 0),
     });
 
     const toPoint = (
@@ -1693,6 +2005,7 @@ function App() {
       if (raw?.type === "cleared") {
         setEvents([]);
         setChartData({ test: [], production: [] });
+        setMutationActivity([]);
         setShowOlderEvents(false);
         return;
       }
@@ -1704,6 +2017,28 @@ function App() {
         const latestFirst = [...snapshot].sort((a, b) => (b.cycle ?? 0) - (a.cycle ?? 0));
         setEvents(latestFirst);
         setChartData(buildChartData(snapshot));
+        setMutationActivity([]);
+        return;
+      }
+
+      if (raw?.type === "mutation_update") {
+        const update = raw as MutationUpdateMessage;
+        setEvents((prev) => prev.map((event) => (
+          event.cycle === update.cycle
+            ? { ...event, ...update.summary }
+            : event
+        )));
+
+        if (update.mutation) {
+          setMutationActivity((prev) => [
+            {
+              ...update.mutation,
+              cycle: update.cycle,
+              receivedAt: Date.now(),
+            },
+            ...prev,
+          ].slice(0, 16));
+        }
         return;
       }
 
@@ -1713,6 +2048,9 @@ function App() {
 
       // Primary mode: one checkpoint event per test run with split test/prod metrics.
       if (event.category === "checkpoint") {
+        // Keep mutation stream scoped to the active cycle only.
+        setMutationActivity([]);
+
         const testPoint: ChartPoint = {
           cycle: event.cycle,
           complexity: event.test_complexity ?? 0,
@@ -1807,6 +2145,10 @@ function App() {
   const refactoringMetrics = useMemo(() => computeRefactoringTelemetry(events, cycleEvents), [events, cycleEvents]);
   const architecturalDriftTelemetry = useMemo(() => computeArchitecturalDriftTelemetry(cycleEvents), [cycleEvents]);
   const cognitiveLoadMetrics = useMemo(() => computeCognitiveLoadTelemetry(events, cycleEvents), [events, cycleEvents]);
+  const mutationTestingMetrics = useMemo(
+    () => computeMutationTestingTelemetry(cycleEvents, mutationActivity),
+    [cycleEvents, mutationActivity]
+  );
 
   const visibleEvents = historyMode === "latest"
     ? cycleEvents.slice(0, 1)
@@ -1825,6 +2167,7 @@ function App() {
   function clearVisibleMetrics() {
     setEvents([]);
     setChartData({ test: [], production: [] });
+    setMutationActivity([]);
     setShowOlderEvents(false);
   }
 
@@ -1878,7 +2221,7 @@ function App() {
             <span style={{ fontFamily: "'Outfit', system-ui, sans-serif", fontSize: 11, fontWeight: 600, letterSpacing: 1.5, color: theme.textMuted, textTransform: "uppercase", marginTop: 4 }}>TDD Telemetry Tool</span>
           </div>
         </div>
-        <span style={{ color: theme.textFaint, fontSize: 13 }}>{visibleEvents.length} event{visibleEvents.length !== 1 ? "s" : ""} visible</span>
+        <span style={{ color: theme.textFaint, fontSize: 13 }}>{visibleEvents.length} cycle{visibleEvents.length !== 1 ? "s" : ""} visible</span>
         {visibleEvents.length > 0 && (() => {
           const latest = visibleEvents[0];
           return (
@@ -1900,16 +2243,24 @@ function App() {
                   width: 8,
                   height: 8,
                   borderRadius: "50%",
-                  background: latest.tests_failed > 0 ? "#ef4444" : "#c084fc",
+                  background: latest.tests_failed > 0 ? "#ef4444" : "#ff8a00",
                   boxShadow: latest.tests_failed > 0
                     ? "0 0 0 3px #ef444422, 0 0 9px #ef444488"
-                    : "0 0 0 3px #c084fc22, 0 0 9px #d946ef88",
+                    : "0 0 0 3px #ff8a0028, 0 0 11px #ff8a00aa",
                   animation: "pulse-dot 1.4s ease-in-out infinite",
                   flexShrink: 0,
                 }}
               />
               <div style={{ display: "flex", flexDirection: "column", gap: 2, minWidth: 0 }}>
-                <span style={{ color: theme.text, fontSize: 14, fontWeight: 900, letterSpacing: 0.2 }}>
+                <span
+                  style={{
+                    color: "#ff8a00",
+                    fontSize: 14,
+                    fontWeight: 900,
+                    letterSpacing: 0.2,
+                    textRendering: "geometricPrecision",
+                  }}
+                >
                   Current Cycle #{latest.cycle}
                 </span>
                 <span style={{ color: latest.tests_failed > 0 ? "#ef4444" : "#10b981", fontSize: 11, fontWeight: 700 }}>
@@ -1935,67 +2286,79 @@ function App() {
             </div>
           );
         })()}
-        <button
-          onClick={() => setHistoryMode("all")}
+        <div
           style={{
             marginLeft: 12,
-            background: historyMode === "all" ? theme.surfaceAlt : theme.surface,
-            color: historyMode === "all" ? theme.text : theme.textMuted,
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+            background: theme.surfaceAlt,
             border: `1px solid ${theme.border}`,
-            borderRadius: 8,
-            padding: "6px 10px",
-            cursor: "pointer",
-            fontSize: 12,
-            fontWeight: 600,
+            borderRadius: 10,
+            padding: "6px",
           }}
         >
-          Show All Cycles
-        </button>
-        <button
-          onClick={() => setHistoryMode("latest")}
-          style={{
-            background: historyMode === "latest" ? theme.surfaceAlt : theme.surface,
-            color: historyMode === "latest" ? theme.text : theme.textMuted,
-            border: `1px solid ${theme.border}`,
-            borderRadius: 8,
-            padding: "6px 10px",
-            cursor: "pointer",
-            fontSize: 12,
-            fontWeight: 600,
-          }}
-        >
-          Keep Latest Cycle
-        </button>
-        <button
-          onClick={clearVisibleMetrics}
-          style={{
-            background: theme.surface,
-            color: "#ef4444",
-            border: `1px solid ${theme.border}`,
-            borderRadius: 8,
-            padding: "6px 10px",
-            cursor: "pointer",
-            fontSize: 12,
-            fontWeight: 600,
-          }}
-        >
-          Clear View
-        </button>
-        <button
-          onClick={() => setShowClearDbDialog(true)}
-          style={{
-            background: theme.surface,
-            color: "#ef4444",
-            border: `1px solid #ef4444`,
-            borderRadius: 8,
-            padding: "6px 10px",
-            cursor: "pointer",
-            fontSize: 12,
-            fontWeight: 600,
-          }}
-        >
-          Clear All Data
-        </button>
+          <button
+            onClick={() => setHistoryMode("all")}
+            style={{
+              background: historyMode === "all" ? theme.surface : "transparent",
+              color: historyMode === "all" ? theme.text : theme.textMuted,
+              border: `1px solid ${historyMode === "all" ? theme.border : "transparent"}`,
+              borderRadius: 8,
+              padding: "6px 10px",
+              cursor: "pointer",
+              fontSize: 12,
+              fontWeight: 600,
+            }}
+          >
+            Show All Cycles
+          </button>
+          <button
+            onClick={() => setHistoryMode("latest")}
+            style={{
+              background: historyMode === "latest" ? theme.surface : "transparent",
+              color: historyMode === "latest" ? theme.text : theme.textMuted,
+              border: `1px solid ${historyMode === "latest" ? theme.border : "transparent"}`,
+              borderRadius: 8,
+              padding: "6px 10px",
+              cursor: "pointer",
+              fontSize: 12,
+              fontWeight: 600,
+            }}
+          >
+            Keep Latest Cycle
+          </button>
+          <button
+            onClick={clearVisibleMetrics}
+            style={{
+              background: theme.surface,
+              color: "#ef4444",
+              border: `1px solid ${theme.border}`,
+              borderRadius: 8,
+              padding: "6px 10px",
+              cursor: "pointer",
+              fontSize: 12,
+              fontWeight: 600,
+            }}
+          >
+            Clear View
+          </button>
+          <button
+            onClick={() => setShowClearDbDialog(true)}
+            style={{
+              background: theme.surface,
+              color: "#ef4444",
+              border: `1px solid #ef4444`,
+              borderRadius: 8,
+              padding: "6px 10px",
+              cursor: "pointer",
+              fontSize: 12,
+              fontWeight: 600,
+            }}
+          >
+            Clear All Data
+          </button>
+        </div>
         <button
           onClick={() => setThemeMode((prev) => (prev === "dark" ? "light" : "dark"))}
           style={{
@@ -2043,6 +2406,10 @@ function App() {
               theme={theme}
               chartKind="production"
             />
+          </div>
+
+          <div style={{ marginTop: 20 }}>
+            <MutationTestingPanel metrics={mutationTestingMetrics} theme={theme} />
           </div>
 
           <div style={{ marginTop: 20, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(360px, 1fr))", gap: 14 }}>
