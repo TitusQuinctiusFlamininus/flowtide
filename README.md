@@ -1,4 +1,4 @@
-![tdd](https://img.shields.io/badge/test_driven_development-green) ![mutation](https://img.shields.io/badge/mutation_testing-purple) ![telemetry](https://img.shields.io/badge/quality_telemetry-blue) ![xp](https://img.shields.io/badge/extreme_programming-brown)
+![tdd](https://img.shields.io/badge/xp-test_driven_development-green) ![cicd](https://img.shields.io/badge/xp-continuous_delivery-pink) ![mutation](https://img.shields.io/quality-badge/qa-mutation_testing-purple) ![xp](https://img.shields.io/badge/qa-best_practises-brown) ![telemetry](https://img.shields.io/badge/real_time-telemetry-blue)
 
 # Flowtide
 
