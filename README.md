@@ -1,3 +1,5 @@
+https://img.shields.io/badge/github-repo-blue?logo=github
+
 # Flowtide
 
 Flowtide is a TDD telemetry tool that watches a codebase, analyzes source changes, runs that codebase's tests, and streams live metrics into a React dashboard.
