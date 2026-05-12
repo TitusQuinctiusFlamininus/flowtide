@@ -1,4 +1,4 @@
-https://img.shields.io/badge/github-repo-blue?logo=github
+![telemetry](https://img.shields.io/badge/telemetry-blue)
 
 # Flowtide
 
