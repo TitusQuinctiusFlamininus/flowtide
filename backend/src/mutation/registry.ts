@@ -1,18 +1,16 @@
 import { adapterFor } from "../registry";
 import { csharpMutationAdapter } from "./adapters/csharpMutationAdapter";
+import { elmMutationAdapter } from "./adapters/elmMutationAdapter";
 import { genericMutationAdapter } from "./adapters/genericMutationAdapter";
-import {
-  typescriptMutationAdapter,
-  javaMutationAdapter,
-  pythonMutationAdapter,
-  rustMutationAdapter,
-  goMutationAdapter,
-  rubyMutationAdapter,
-  haskellMutationAdapter,
-  elmMutationAdapter,
-  kotlinMutationAdapter,
-  swiftMutationAdapter,
-} from "./adapters/languageMutationAdapters";
+import { goMutationAdapter } from "./adapters/goMutationAdapter";
+import { haskellMutationAdapter } from "./adapters/haskellMutationAdapter";
+import { javaMutationAdapter } from "./adapters/javaMutationAdapter";
+import { kotlinMutationAdapter } from "./adapters/kotlinMutationAdapter";
+import { pythonMutationAdapter } from "./adapters/pythonMutationAdapter";
+import { rubyMutationAdapter } from "./adapters/rubyMutationAdapter";
+import { rustMutationAdapter } from "./adapters/rustMutationAdapter";
+import { swiftMutationAdapter } from "./adapters/swiftMutationAdapter";
+import { typescriptMutationAdapter } from "./adapters/typescriptMutationAdapter";
 
 const mutationAdapters = [
   csharpMutationAdapter,

@@ -1240,6 +1240,7 @@ function MetricsChart({
 
 function FlowStatePanel({ metrics, theme }: { metrics: FlowStateMetrics; theme: ThemePalette }) {
   const isDark = theme.appBg === "#0f172a";
+  const flowScoreColor = metrics.flowScore >= 70 ? "#22c55e" : metrics.flowScore >= 45 ? "#f59e0b" : "#ef4444";
 
   const tile = (label: string, value: string, score: number, helper: string) => {
     const [r, g, b] = metricHeatColor(score);
@@ -1292,7 +1293,7 @@ function FlowStatePanel({ metrics, theme }: { metrics: FlowStateMetrics; theme: 
             Flow State Telemetry
           </div>
           <div style={{ color: theme.text, fontSize: 20, fontWeight: 900, marginTop: 3 }}>
-            Flow Score: {metrics.flowScore}
+            Flow Score <span style={{ marginLeft: 8, color: flowScoreColor }}>{metrics.flowScore}</span>
           </div>
         </div>
         <div style={{ color: theme.textMuted, fontSize: 12 }}>Blue = better flow, orange/red = needs attention</div>
@@ -1319,6 +1320,7 @@ function FlowStatePanel({ metrics, theme }: { metrics: FlowStateMetrics; theme: 
 
 function RefactoringTelemetryPanel({ metrics, theme }: { metrics: RefactoringTelemetryMetrics; theme: ThemePalette }) {
   const isDark = theme.appBg === "#0f172a";
+  const refactorDensityColor = metrics.refactorDensity >= 65 ? "#22c55e" : metrics.refactorDensity >= 40 ? "#f59e0b" : "#ef4444";
 
   const formatLocEstimate = (loc: number) => {
     const safe = Math.max(0, Number.isFinite(loc) ? loc : 0);
@@ -1414,7 +1416,7 @@ function RefactoringTelemetryPanel({ metrics, theme }: { metrics: RefactoringTel
         Refactoring Telemetry
       </div>
       <div style={{ color: theme.text, fontSize: 20, fontWeight: 900, marginTop: 3 }}>
-        Refactor Density: {metrics.refactorDensity}%
+        Refactor Density <span style={{ marginLeft: 8, color: refactorDensityColor }}>{metrics.refactorDensity}%</span>
       </div>
 
       <div style={{ marginTop: 10, display: "flex", flexWrap: "wrap", gap: 6 }}>
@@ -1467,7 +1469,7 @@ function ArchitecturalDriftPanel({ telemetry, theme }: { telemetry: Architectura
     ? "#ef4444"
     : telemetry.dependencyEntropy === "MEDIUM"
       ? "#f59e0b"
-      : "#38bdf8";
+      : "#10b981";
 
   return (
     <div
@@ -1484,7 +1486,7 @@ function ArchitecturalDriftPanel({ telemetry, theme }: { telemetry: Architectura
             Architectural Drift Telemetry
           </div>
           <div style={{ color: theme.appBg === "#0f172a" ? "#ffffff" : "#000000", fontSize: 20, fontWeight: 900, marginTop: 2 }}>
-            Dependency Entropy: {telemetry.dependencyEntropy}
+            Dependency Entropy <span style={{ color: entropyColor, marginLeft: 8, fontSize: 18 }}>{telemetry.dependencyEntropy}</span>
           </div>
         </div>
       </div>
@@ -1604,11 +1606,21 @@ function CognitiveLoadPanel({ metrics, theme }: { metrics: CognitiveLoadMetrics;
       <div style={{ color: theme.textFaint, fontSize: 11, textTransform: "uppercase", letterSpacing: 0.8 }}>
         Human-Computer Interaction
       </div>
-      <div style={{ color: theme.appBg === "#0f172a" ? "#ffffff" : "#000000", fontSize: 20, fontWeight: 900, marginTop: 2, marginBottom: 8 }}>
-        Cognitive load estimation
-      </div>
-      <div style={{ color: theme.appBg === "#0f172a" ? "#ffffff" : "#000000", fontSize: 20, fontWeight: 900, marginBottom: 8 }}>
-        {metrics.cognitiveLoad}%
+      <div
+        style={{
+          color: theme.appBg === "#0f172a" ? "#ffffff" : "#000000",
+          fontSize: 20,
+          fontWeight: 900,
+          marginTop: 2,
+          marginBottom: 8,
+          display: "flex",
+          alignItems: "baseline",
+          gap: 12,
+          whiteSpace: "nowrap",
+        }}
+      >
+        <span>Cognitive Load Estimation</span>
+        <span style={{ color: loadColor }}>{metrics.cognitiveLoad}%</span>
       </div>
       
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
@@ -1714,7 +1726,7 @@ function MutationTestingPanel({ metrics, theme }: { metrics: MutationTestingMetr
             Mutation Testing
           </div>
           <div style={{ color: theme.text, fontSize: 20, fontWeight: 900, marginTop: 3 }}>
-            Mutation Score: <span style={{ color: scoreColor }}>{metrics.mutationScore}%</span>
+            Mutation Score <span style={{ color: scoreColor, marginLeft: 8 }}>{metrics.mutationScore}%</span>
           </div>
         </div>
         {metrics.queueState !== "skipped" && (
@@ -1857,6 +1869,9 @@ function App() {
   const theme = THEMES[themeMode];
   const [historyMode, setHistoryMode] = useState<"all" | "latest">("all");
   const [showClearDbDialog, setShowClearDbDialog] = useState(false);
+  const [mutationPanelOpen, setMutationPanelOpen] = useState(true);
+  const [cognitiveDriftOpen, setCognitiveDriftOpen] = useState(true);
+  const [flowRefactorOpen, setFlowRefactorOpen] = useState(true);
 
   useEffect(() => {
     const socket = new WebSocket(BACKEND_WS_URL);
@@ -2214,14 +2229,13 @@ function App() {
         <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
           <FlowtideMark theme={theme} />
           <div style={{ display: "flex", flexDirection: "column", justifyContent: "center", lineHeight: 1 }}>
-            <span style={{ fontFamily: "'Outfit', system-ui, sans-serif", fontSize: 26, fontWeight: 800, letterSpacing: -0.8 }}>
+            <span style={{ fontFamily: "'Outfit', system-ui, sans-serif", fontSize: 30, fontWeight: 900, letterSpacing: -1 }}>
               <span style={{ color: themeMode === "dark" ? "#fbbf24" : "#f97316" }}>flow</span>
               <span style={{ color: themeMode === "dark" ? theme.titleColor : "#f97316" }}>tide</span>
             </span>
-            <span style={{ fontFamily: "'Outfit', system-ui, sans-serif", fontSize: 11, fontWeight: 600, letterSpacing: 1.5, color: theme.textMuted, textTransform: "uppercase", marginTop: 4 }}>TDD Telemetry Tool</span>
+            <span style={{ fontFamily: "'Outfit', system-ui, sans-serif", fontSize: 12, fontWeight: 800, letterSpacing: 1.8, color: themeMode === "dark" ? "#cbd5e1" : "#475569", textTransform: "uppercase", marginTop: 5 }}>TDD Telemetry Tool</span>
           </div>
         </div>
-        <span style={{ color: theme.textFaint, fontSize: 13 }}>{visibleEvents.length} cycle{visibleEvents.length !== 1 ? "s" : ""} visible</span>
         {visibleEvents.length > 0 && (() => {
           const latest = visibleEvents[0];
           return (
@@ -2254,7 +2268,7 @@ function App() {
               <div style={{ display: "flex", flexDirection: "column", gap: 2, minWidth: 0 }}>
                 <span
                   style={{
-                    color: "#ff8a00",
+                    color: "#9ca3af",
                     fontSize: 14,
                     fontWeight: 900,
                     letterSpacing: 0.2,
@@ -2288,7 +2302,7 @@ function App() {
         })()}
         <div
           style={{
-            marginLeft: 12,
+            marginLeft: "auto",
             display: "flex",
             alignItems: "center",
             gap: 8,
@@ -2318,7 +2332,7 @@ function App() {
             style={{
               background: historyMode === "latest" ? theme.surface : "transparent",
               color: historyMode === "latest" ? theme.text : theme.textMuted,
-              border: `1px solid ${historyMode === "latest" ? theme.border : "transparent"}`,
+              border: `1px solid ${theme.border}`,
               borderRadius: 8,
               padding: "6px 10px",
               cursor: "pointer",
@@ -2362,15 +2376,19 @@ function App() {
         <button
           onClick={() => setThemeMode((prev) => (prev === "dark" ? "light" : "dark"))}
           style={{
-            marginLeft: "auto",
-            background: theme.surface,
-            color: theme.textMuted,
-            border: `1px solid ${theme.border}`,
+            marginLeft: 10,
+            background: themeMode === "dark" ? "#f8fafc" : "#0f172a",
+            color: themeMode === "dark" ? "#0f172a" : "#f8fafc",
+            border: `2px solid ${themeMode === "dark" ? "#cbd5e1" : "#1e293b"}`,
             borderRadius: 8,
-            padding: "6px 10px",
+            padding: "7px 12px",
             cursor: "pointer",
-            fontSize: 12,
-            fontWeight: 600,
+            fontSize: 13,
+            fontWeight: 800,
+            letterSpacing: 0.2,
+            boxShadow: themeMode === "dark"
+              ? "0 2px 8px rgba(15,23,42,0.18)"
+              : "0 2px 8px rgba(2,6,23,0.35)",
           }}
         >
           {themeMode === "dark" ? "Light Mode" : "Dark Mode"}
@@ -2409,17 +2427,64 @@ function App() {
           </div>
 
           <div style={{ marginTop: 20 }}>
-            <MutationTestingPanel metrics={mutationTestingMetrics} theme={theme} />
+            <button
+              onClick={() => setMutationPanelOpen(o => !o)}
+              style={{
+                display: "flex", alignItems: "center", gap: 6,
+                background: "none", border: "none", cursor: "pointer",
+                color: theme.textFaint, fontSize: 11, fontWeight: 700,
+                letterSpacing: 1.2, textTransform: "uppercase",
+                padding: "4px 0", marginBottom: mutationPanelOpen ? 8 : 0,
+              }}
+            >
+              <span style={{ fontSize: 10, display: "inline-block", transform: mutationPanelOpen ? "rotate(90deg)" : "rotate(0deg)", transition: "transform 0.2s" }}>▶</span>
+              Mutation Testing
+            </button>
+            {mutationPanelOpen && <MutationTestingPanel metrics={mutationTestingMetrics} theme={theme} />}
           </div>
 
-          <div style={{ marginTop: 20, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(360px, 1fr))", gap: 14 }}>
-            <CognitiveLoadPanel metrics={cognitiveLoadMetrics} theme={theme} />
-            <ArchitecturalDriftPanel telemetry={architecturalDriftTelemetry} theme={theme} />
+          <div style={{ marginTop: 20 }}>
+            <button
+              onClick={() => setCognitiveDriftOpen(o => !o)}
+              style={{
+                display: "flex", alignItems: "center", gap: 6,
+                background: "none", border: "none", cursor: "pointer",
+                color: theme.textFaint, fontSize: 11, fontWeight: 700,
+                letterSpacing: 1.2, textTransform: "uppercase",
+                padding: "4px 0", marginBottom: cognitiveDriftOpen ? 8 : 0,
+              }}
+            >
+              <span style={{ fontSize: 10, display: "inline-block", transform: cognitiveDriftOpen ? "rotate(90deg)" : "rotate(0deg)", transition: "transform 0.2s" }}>▶</span>
+              Cognitive Load &amp; Architectural Drift
+            </button>
+            {cognitiveDriftOpen && (
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(360px, 1fr))", gap: 14 }}>
+                <CognitiveLoadPanel metrics={cognitiveLoadMetrics} theme={theme} />
+                <ArchitecturalDriftPanel telemetry={architecturalDriftTelemetry} theme={theme} />
+              </div>
+            )}
           </div>
 
-          <div style={{ marginTop: 20, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(360px, 1fr))", gap: 14 }}>
-            <FlowStatePanel metrics={flowStateMetrics} theme={theme} />
-            <RefactoringTelemetryPanel metrics={refactoringMetrics} theme={theme} />
+          <div style={{ marginTop: 20 }}>
+            <button
+              onClick={() => setFlowRefactorOpen(o => !o)}
+              style={{
+                display: "flex", alignItems: "center", gap: 6,
+                background: "none", border: "none", cursor: "pointer",
+                color: theme.textFaint, fontSize: 11, fontWeight: 700,
+                letterSpacing: 1.2, textTransform: "uppercase",
+                padding: "4px 0", marginBottom: flowRefactorOpen ? 8 : 0,
+              }}
+            >
+              <span style={{ fontSize: 10, display: "inline-block", transform: flowRefactorOpen ? "rotate(90deg)" : "rotate(0deg)", transition: "transform 0.2s" }}>▶</span>
+              Flow State &amp; Refactoring
+            </button>
+            {flowRefactorOpen && (
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(360px, 1fr))", gap: 14 }}>
+                <FlowStatePanel metrics={flowStateMetrics} theme={theme} />
+                <RefactoringTelemetryPanel metrics={refactoringMetrics} theme={theme} />
+              </div>
+            )}
           </div>
 
           {visibleEvents.length === 0 && (
