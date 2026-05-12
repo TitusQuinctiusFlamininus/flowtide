@@ -1,4 +1,4 @@
-![telemetry](https://img.shields.io/badge/telemetry-blue) ![tdd](https://img.shields.io/badge/tdd-green) ![mutation](https://img.shields.io/badge/mutation_testing-red)
+![tdd](https://img.shields.io/badge/test_driven_development-green) ![mutation](https://img.shields.io/badge/mutation_testing-purple) ![telemetry](https://img.shields.io/badge/quality_telemetry-blue) ![xp](https://img.shields.io/badge/extreme_programming-brown)
 
 # Flowtide
 
