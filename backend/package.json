@@ -4,7 +4,9 @@
   "scripts": {
     "dev": "nodemon --exec ts-node src/server.ts",
     "dev:local": "nodemon --exec ts-node src/server.ts --host localhost --port 8080",
-    "dev:public": "nodemon --exec ts-node src/server.ts --host 0.0.0.0 --port 9090"
+    "dev:public": "nodemon --exec ts-node src/server.ts --host 0.0.0.0 --port 9090",
+    "setup:unity-runner": "node scripts/setupUnityRegularRunner.js",
+    "postinstall": "npm run setup:unity-runner"
   },
   "dependencies": {
     "better-sqlite3": "^9.0.0",

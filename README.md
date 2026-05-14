@@ -4,7 +4,7 @@
 
 Flowtide is a TDD telemetry tool that watches a codebase, analyzes source changes, runs that codebase's tests, and streams live metrics into a React dashboard.
 
-![Flowtide dashboard in light mode](images/light_theme_flowtide.png)
+![Flowtide dashboard in dark mode](images/dark_theme_flowtide.png)
 
 ## Dashboard Metrics
 
@@ -171,6 +171,10 @@ npm install
 cd ../frontend
 npm install
 ```
+
+When you run `npm install` in `backend/`, Flowtide also attempts to build the Unity regular test runner helper into `backend/tools/unity-regular-test-runner/dist/`.
+
+If `dotnet` is not available, backend installation still completes and Flowtide falls back to on-demand execution for the Unity regular runner path.
 
 ### If you need to remove `node_modules`
 
@@ -420,7 +424,6 @@ At a high level:
 
 	- killed: tests failed after mutation (strong test detection)
 	- survived: tests still passed after mutation (potentially weak test coverage)
-	- timeout: mutation run produced no usable test result
 
 The dashboard includes a Mutation Testing panel directly below the Test Code and Production Code charts.
 
@@ -429,7 +432,7 @@ Metrics shown:
 - Mutation Score: percentage of killed mutants for the latest cycle
 - Killed: killed mutant count for the latest cycle
 - Survived: survived mutant count for the latest cycle
-- Trend chart: per-cycle mutation score plus killed/survived/timeout series
+- Trend chart: per-cycle mutation score plus killed/survived series
 - Live Mutation Stream: survived mutation entries (only) with file, operator, cycle, and test result context
 
 Common mutation operators across supported language adapters include equality flips (`==`/`!=`, plus strict equality where available), relational flips (`>=`/`<`, `<=`/`>`), logical operator flips (`&&`/`||` or `and`/`or`), boolean literal flips (`true`/`false` or `True`/`False`), and null-check flips where language syntax supports them.

@@ -39,6 +39,8 @@ interface TelemetryEvent {
   tests_passed: number;
   tests_failed: number;
   tests_total: number;
+  tests_unavailable?: number;
+  top_failures?: string[];
   new_tests: string[];
   test_loc_added?: number;
   test_loc_removed?: number;
@@ -300,7 +302,11 @@ const CATEGORY_COLORS: Record<string, string> = {
 };
 
 function formatTime(ts: number) {
-  return new Date(ts).toLocaleTimeString();
+  const date = new Date(ts);
+  const hh = String(date.getHours()).padStart(2, "0");
+  const mm = String(date.getMinutes()).padStart(2, "0");
+  const ss = String(date.getSeconds()).padStart(2, "0");
+  return `${hh}:${mm}:${ss}`;
 }
 
 function clamp(value: number, min: number, max: number) {
@@ -561,21 +567,33 @@ function computeArchitecturalDriftTelemetry(cycleEvents: TelemetryEvent[]): Arch
   const sorted = [...cycleEvents].sort((a, b) => (a.cycle ?? 0) - (b.cycle ?? 0));
   const series: ArchitecturalDriftPoint[] = [];
 
+  const combinedMetric = (total?: number, prod?: number, test?: number) => {
+    const prodVal = prod ?? 0;
+    const testVal = test ?? 0;
+    if (prodVal !== 0 || testVal !== 0) {
+      return prodVal + testVal;
+    }
+    return total ?? 0;
+  };
+
   let cumulativeFileTouches = 0;
   let cumulativeUniqueApprox = 0;
 
   for (const c of sorted) {
     const filesInCycle = Math.max(1, (c.prod_file_count ?? 0) + (c.test_file_count ?? 0));
-    const added = (c.prod_loc_added ?? 0) + (c.test_loc_added ?? 0) + (c.loc_added ?? 0);
-    const removed = (c.prod_loc_removed ?? 0) + (c.test_loc_removed ?? 0) + (c.loc_removed ?? 0);
-    const functions = (c.prod_functions ?? 0) + (c.test_functions ?? 0) + (c.functions ?? 0);
-    const conditionals = (c.prod_conditionals ?? 0) + (c.test_conditionals ?? 0) + (c.conditionals ?? 0);
-    const complexity = (c.prod_complexity ?? 0) + (c.test_complexity ?? 0) + (c.complexity ?? 0);
+    const added = combinedMetric(c.loc_added, c.prod_loc_added, c.test_loc_added);
+    const removed = combinedMetric(c.loc_removed, c.prod_loc_removed, c.test_loc_removed);
+    const functions = combinedMetric(c.functions, c.prod_functions, c.test_functions);
+    const conditionals = combinedMetric(c.conditionals, c.prod_conditionals, c.test_conditionals);
+    const complexity = combinedMetric(c.complexity, c.prod_complexity, c.test_complexity);
+
+    const functionsPerFile = functions / filesInCycle;
+    const conditionalsPerFile = conditionals / filesInCycle;
 
     const mixedCycleBonus = (c.prod_file_count ?? 0) > 0 && (c.test_file_count ?? 0) > 0 ? 8 : 0;
     const moduleCoupling = clamp(
-      (functions / (filesInCycle * 6)) * 100
-      + (conditionals / (filesInCycle * 10)) * 20
+      (functionsPerFile / 14) * 100
+      + (conditionalsPerFile / 18) * 40
       + mixedCycleBonus,
       0,
       100
@@ -833,6 +851,8 @@ function mergeEventsByCycle(events: TelemetryEvent[]): TelemetryEvent[] {
       tests_passed: Math.max(existing.tests_passed ?? 0, event.tests_passed ?? 0),
       tests_failed: Math.max(existing.tests_failed ?? 0, event.tests_failed ?? 0),
       tests_total: Math.max(existing.tests_total ?? 0, event.tests_total ?? 0),
+      tests_unavailable: Math.max(existing.tests_unavailable ?? 0, event.tests_unavailable ?? 0),
+      top_failures: Array.from(new Set([...(existing.top_failures ?? []), ...(event.top_failures ?? [])])).slice(0, 3),
       tests_duration_ms: Math.max(existing.tests_duration_ms ?? 0, event.tests_duration_ms ?? 0),
       new_tests: Array.from(new Set([...(existing.new_tests ?? []), ...(event.new_tests ?? [])])),
       test_loc_added: (existing.test_loc_added ?? 0) + (event.test_loc_added ?? 0),
@@ -912,7 +932,10 @@ function FlowtideMark({ theme }: { theme: ThemePalette }) {
 }
 
 function EventCard({ event, index, theme, isLatest }: { event: TelemetryEvent; index: number; theme: ThemePalette; isLatest?: boolean }) {
-  const catColor = CATEGORY_COLORS[event.category] ?? "#94a3b8";
+  const isDark = theme.appBg === "#0f172a";
+  const catColor = event.category === "checkpoint"
+    ? (isDark ? "#93c5fd" : "#1e3a8a")
+    : (CATEGORY_COLORS[event.category] ?? "#94a3b8");
   const hasTestData = event.tests_total > 0;
   const hasFailures = event.tests_failed > 0;
   const hasProdChanges =
@@ -1000,13 +1023,24 @@ function EventCard({ event, index, theme, isLatest }: { event: TelemetryEvent; i
           )}
           Cycle #{event.cycle}
         </span>
-        <span style={{ color: theme.textFaint, fontSize: 11 }}>{formatTime(event.timestamp)}</span>
+        <span
+          style={{
+            color: isDark ? "#ffffff" : "#ffffff",
+            fontSize: 11,
+            fontFamily: "Arial, Helvetica, sans-serif",
+            fontWeight: 300,
+            letterSpacing: 1.1,
+            fontVariantNumeric: "tabular-nums",
+          }}
+        >
+          {formatTime(event.timestamp)}
+        </span>
       </div>
 
       {/* Test name */}
       <div style={{ marginBottom: 3 }}>
-        <span style={{ color: theme.textFaint, fontSize: 10, textTransform: "uppercase", letterSpacing: 0.6 }}>Test / Module</span>
-        <div style={{ color: theme.text, fontSize: 13, fontWeight: 600, marginTop: 1 }}>
+        <span style={{ color: isDark ? theme.textFaint : "#334155", fontSize: 11, fontWeight: 800, textTransform: "uppercase", letterSpacing: 0.7 }}>Test / Module</span>
+        <div style={{ color: isDark ? theme.text : "rgba(255, 255, 255, 0.9)", fontSize: 13, fontWeight: 600, marginTop: 1 }}>
           {event.test_name || "—"}
         </div>
       </div>
@@ -1021,7 +1055,7 @@ function EventCard({ event, index, theme, isLatest }: { event: TelemetryEvent; i
 
       <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 7 }}>
         <Badge label={event.category} color={catColor} />
-        <Badge label={event.language} color="#38bdf8" />
+        <Badge label={event.language} color={isDark ? "#38bdf8" : "#0c4a6e"} />
       </div>
 
       {isCheckpoint ? (
@@ -1041,7 +1075,7 @@ function EventCard({ event, index, theme, isLatest }: { event: TelemetryEvent; i
           )}
           {hasTestChanges && (
             <div>
-              <div style={{ color: "#22d3ee", textShadow: "0 0 10px #22d3ee66", fontSize: 10, textTransform: "uppercase", letterSpacing: 0.6, marginBottom: 4, fontWeight: 700 }}>
+              <div style={{ color: isDark ? "#22d3ee" : "#0e7490", textShadow: isDark ? "0 0 10px #22d3ee66" : "0 0 6px #0891b233", fontSize: 10, textTransform: "uppercase", letterSpacing: 0.6, marginBottom: 4, fontWeight: 700 }}>
                 Test Code
               </div>
               <MetricGrid
@@ -1076,7 +1110,7 @@ function EventCard({ event, index, theme, isLatest }: { event: TelemetryEvent; i
 function themeModeAwareColor(theme: ThemePalette, kind: "success" | "warning" | "successBorder" | "warningBorder", isLatest = false) {
   const isDark = theme.appBg === "#0f172a";
   if (kind === "success") return isDark ? (isLatest ? "#14532d" : "#123524") : (isLatest ? "#dcfce7" : "#ecfdf5");
-  if (kind === "warning") return isDark ? (isLatest ? "#5c0a16" : "#3d0910") : (isLatest ? "#fecaca" : "#fee2e2");
+  if (kind === "warning") return isDark ? (isLatest ? "#5c0a16" : "#3d0910") : (isLatest ? "#fca5a5" : "#fecaca");
   if (kind === "successBorder") return isDark ? (isLatest ? "#4ade80" : "#22c55e") : (isLatest ? "#22c55e" : "#86efac");
   /* warningBorder */ return isDark ? (isLatest ? "#f87171" : "#ef4444") : (isLatest ? "#ef4444" : "#fca5a5");
 }
@@ -1243,7 +1277,11 @@ function FlowStatePanel({ metrics, theme }: { metrics: FlowStateMetrics; theme: 
   const flowScoreColor = metrics.flowScore >= 70 ? "#22c55e" : metrics.flowScore >= 45 ? "#f59e0b" : "#ef4444";
 
   const tile = (label: string, value: string, score: number, helper: string) => {
-    const [r, g, b] = metricHeatColor(score);
+    const [baseR, baseG, baseB] = metricHeatColor(score);
+    const isTestCadenceTile = label === "Test Cadence";
+    const r = isTestCadenceTile ? 168 : baseR;
+    const g = isTestCadenceTile ? 85 : baseG;
+    const b = isTestCadenceTile ? 247 : baseB;
     const border = `rgba(${r}, ${g}, ${b}, ${isDark ? 0.9 : 0.7})`;
     const bg = `rgba(${r}, ${g}, ${b}, ${isDark ? 0.28 : 0.45})`;
     const glow = isDark
@@ -1892,6 +1930,19 @@ function App() {
       mutation_adapter: raw.mutation_adapter ?? "",
       mutation_stream_events: Number(raw.mutation_stream_events ?? 0),
       mutation_stable_keys: Number(raw.mutation_stable_keys ?? 0),
+      tests_unavailable: Number(raw.tests_unavailable ?? 0),
+      top_failures: Array.isArray(raw.top_failures)
+        ? raw.top_failures.map((entry: unknown) => String(entry)).slice(0, 3)
+        : (typeof raw.top_failures === "string"
+          ? (() => {
+              try {
+                const parsed = JSON.parse(raw.top_failures);
+                return Array.isArray(parsed) ? parsed.map((entry) => String(entry)).slice(0, 3) : [];
+              } catch {
+                return [];
+              }
+            })()
+          : []),
     });
 
     const toPoint = (
@@ -2278,11 +2329,28 @@ function App() {
                   Current Cycle #{latest.cycle}
                 </span>
                 <span style={{ color: latest.tests_failed > 0 ? "#ef4444" : "#10b981", fontSize: 11, fontWeight: 700 }}>
-                  {latest.tests_total > 0
-                    ? latest.tests_failed > 0
-                      ? `${latest.tests_failed} failing, ${latest.tests_passed} passing test${latest.tests_total === 1 ? "" : "s"} in cycle`
-                      : `${latest.tests_passed} passing test${latest.tests_passed === 1 ? "" : "s"} in cycle`
-                    : "No tests recorded in cycle"}
+                  {(() => {
+                    const executed = latest.tests_total ?? 0;
+                    const unavailable = latest.tests_unavailable ?? 0;
+
+                    if (executed > 0) {
+                      const executedLabel = latest.tests_failed > 0
+                        ? `${latest.tests_failed} failing, ${latest.tests_passed} passing test${executed === 1 ? "" : "s"} in cycle`
+                        : `${latest.tests_passed} passing test${latest.tests_passed === 1 ? "" : "s"} in cycle`;
+
+                      if (unavailable > 0) {
+                        return `${executedLabel} (+${unavailable} discovered unavailable)`;
+                      }
+
+                      return executedLabel;
+                    }
+
+                    if (unavailable > 0) {
+                      return `${unavailable} test${unavailable === 1 ? "" : "s"} discovered (execution unavailable)`;
+                    }
+
+                    return "No tests recorded in cycle";
+                  })()}
                 </span>
               </div>
               {latest.tests_total > 0 && (

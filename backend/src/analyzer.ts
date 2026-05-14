@@ -21,7 +21,11 @@ import {
   type MutationSummary,
 } from "./mutation/runMutationTesting";
 
-let cycleCounter = 0;
+const cycleSeedRow = db
+  .prepare("SELECT COALESCE(MAX(cycle), 0) AS maxCycle FROM events")
+  .get() as { maxCycle?: number } | undefined;
+
+let cycleCounter = Number(cycleSeedRow?.maxCycle ?? 0);
 let flushTimer: NodeJS.Timeout | null = null;
 
 interface FileState {
@@ -240,6 +244,8 @@ async function flushCycle() {
     tests_passed: testRun.passed,
     tests_failed: testRun.failed,
     tests_total: testRun.total,
+    tests_unavailable: testRun.unavailable,
+    top_failures: JSON.stringify(testRun.top_failures ?? []),
     tests_duration_ms: testRun.duration_ms,
     new_tests: JSON.stringify([...snapshot.newTests]),
     ...createMutationSummary({
@@ -270,6 +276,8 @@ async function flushCycle() {
       tests_passed,
       tests_failed,
       tests_total,
+      tests_unavailable,
+      top_failures,
       tests_duration_ms,
       new_tests,
       test_loc_added,
@@ -329,6 +337,8 @@ async function flushCycle() {
       @tests_passed,
       @tests_failed,
       @tests_total,
+      @tests_unavailable,
+      @top_failures,
       @tests_duration_ms,
       @new_tests,
       @test_loc_added,

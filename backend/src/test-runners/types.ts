@@ -2,12 +2,16 @@ export interface ParsedTestResult {
   passed: number;
   failed: number;
   total: number;
+  unavailable?: number;
+  top_failures?: string[];
 }
 
 export interface TestRunResult {
   passed: number;
   failed: number;
   total: number;
+  unavailable: number;
+  top_failures: string[];
   duration_ms: number;
 }
 

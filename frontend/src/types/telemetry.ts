@@ -17,6 +17,8 @@ export interface TelemetryEvent {
   tests_passed: number;
   tests_failed: number;
   tests_total: number;
+  tests_unavailable?: number;
+  top_failures?: string[];
   new_tests: string[];
   test_loc_added?: number;
   test_loc_removed?: number;

@@ -18,5 +18,12 @@ export async function runTests(filePath: string): Promise<TestRunResult> {
 
   console.log(`[runTests] ${runner.kind} output:`, output.slice(0, 500));
   const result = runner.parse(output);
-  return { ...result, duration_ms };
+  return {
+    passed: result.passed,
+    failed: result.failed,
+    total: result.total,
+    unavailable: result.unavailable ?? 0,
+    top_failures: (result.top_failures ?? []).slice(0, 3),
+    duration_ms,
+  };
 }

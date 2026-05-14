@@ -8,13 +8,15 @@ export const EMPTY_RESULT: TestRunResult = {
   passed: 0,
   failed: 0,
   total: 0,
+  unavailable: 0,
+  top_failures: [],
   duration_ms: 0,
 };
 
 export function findUp(
   from: string,
   sentinels: string[],
-  maxDepth = 10
+  maxDepth = Number.POSITIVE_INFINITY
 ): { root: string; matched: string } | null {
   let dir = path.dirname(from);
   for (let i = 0; i < maxDepth; i++) {
@@ -33,11 +35,16 @@ export function findUp(
 export function findUpByEntry(
   from: string,
   matchesEntry: (entryName: string) => boolean,
-  maxDepth = 10
+  maxDepth = Number.POSITIVE_INFINITY
 ): { root: string } | null {
   let dir = path.dirname(from);
   for (let i = 0; i < maxDepth; i++) {
-    const entries = fs.readdirSync(dir);
+    let entries: string[] = [];
+    try {
+      entries = fs.readdirSync(dir);
+    } catch {
+      entries = [];
+    }
     if (entries.some(matchesEntry)) {
       return { root: dir };
     }
@@ -52,13 +59,14 @@ export async function execCommand(
   cmd: string,
   args: string[],
   cwd: string,
-  extraEnv: Record<string, string> = {}
+  extraEnv: Record<string, string> = {},
+  timeoutMs = 60_000
 ): Promise<string> {
   try {
     const result = await execa(cmd, args, {
       cwd,
       reject: false,
-      timeout: 60_000,
+      timeout: timeoutMs,
       env: { ...process.env, FORCE_COLOR: "0", ...extraEnv },
     });
     return result.stdout + "\n" + result.stderr;
