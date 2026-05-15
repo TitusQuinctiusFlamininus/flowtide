@@ -43,13 +43,15 @@ export function parseGradle(output: string): ParsedTestResult {
 }
 
 export function parsePytest(output: string): ParsedTestResult {
-  const match = output.match(/(?:(\d+)\s+passed)?(?:,?\s*(\d+)\s+failed)?(?:,?\s*(\d+)\s+error)?/i);
-  if (!match || (!match[1] && !match[2] && !match[3])) {
+  const passed = parseInt(output.match(/(\d+)\s+passed\b/i)?.[1] ?? "0");
+  const failed = parseInt(output.match(/(\d+)\s+failed\b/i)?.[1] ?? "0");
+  const errors = parseInt(output.match(/(\d+)\s+errors?\b/i)?.[1] ?? "0");
+
+  if (passed === 0 && failed === 0 && errors === 0) {
     return { passed: 0, failed: 0, total: 0 };
   }
-  const passed = parseInt(match[1] ?? "0");
-  const failed = parseInt(match[2] ?? "0") + parseInt(match[3] ?? "0");
-  return { passed, failed, total: passed + failed };
+
+  return { passed, failed: failed + errors, total: passed + failed + errors };
 }
 
 export function parseCargo(output: string): ParsedTestResult {

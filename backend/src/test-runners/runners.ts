@@ -369,6 +369,235 @@ function detectNpmPackage(filePath: string, dependencyName?: string): DetectedPr
   }
 }
 
+function detectPythonProject(filePath: string): DetectedProject | null {
+  if (!filePath.toLowerCase().endsWith(".py")) {
+    return null;
+  }
+
+  const sentinelMatch = findUp(filePath, [
+    "pytest.ini",
+    "pyproject.toml",
+    "setup.cfg",
+    "setup.py",
+    "requirements.txt",
+    "Pipfile",
+    "tox.ini",
+  ]);
+  if (sentinelMatch) {
+    return { kind: "pytest", root: sentinelMatch.root };
+  }
+
+  const structureMatch = findUpByEntry(
+    filePath,
+    (entry) => ["tests", "test", "conftest.py", "manage.py", ".git"].includes(entry)
+  );
+
+  return structureMatch ? { kind: "pytest", root: structureMatch.root } : null;
+}
+
+function outputSuggestsCommandOrPytestMissing(output: string): boolean {
+  if (!output.trim()) {
+    return true;
+  }
+
+  const normalized = output.toLowerCase();
+  return (
+    normalized.includes("enoent") ||
+    normalized.includes("command not found") ||
+    normalized.includes("is not recognized as an internal or external command") ||
+    normalized.includes("no module named pytest") ||
+    normalized.includes("module named pytest was not found")
+  );
+}
+
+interface PytestCommandAttempt {
+  cmd: string;
+  prefixArgs: string[];
+}
+
+interface PythonTestFileSummary {
+  relativePath: string;
+  testCount: number;
+}
+
+function buildPytestCommandAttempts(root: string): PytestCommandAttempt[] {
+  const attempts: PytestCommandAttempt[] = [];
+
+  const localInterpreterCandidates = [
+    path.join(root, ".venv", "bin", "python"),
+    path.join(root, "venv", "bin", "python"),
+    path.join(root, ".venv", "Scripts", "python.exe"),
+    path.join(root, "venv", "Scripts", "python.exe"),
+  ];
+
+  for (const interpreter of localInterpreterCandidates) {
+    if (fs.existsSync(interpreter)) {
+      attempts.push({ cmd: interpreter, prefixArgs: ["-m", "pytest"] });
+    }
+  }
+
+  attempts.push(
+    { cmd: "pytest", prefixArgs: [] },
+    { cmd: "uv", prefixArgs: ["run", "pytest"] },
+    { cmd: "poetry", prefixArgs: ["run", "pytest"] },
+    { cmd: "pipenv", prefixArgs: ["run", "pytest"] },
+    { cmd: "python", prefixArgs: ["-m", "pytest"] },
+    { cmd: "python3", prefixArgs: ["-m", "pytest"] },
+    { cmd: "py", prefixArgs: ["-m", "pytest"] }
+  );
+
+  return attempts;
+}
+
+function discoverPythonTestFiles(root: string): PythonTestFileSummary[] {
+  const ignoreDirs = new Set([
+    ".git",
+    ".venv",
+    "venv",
+    "__pycache__",
+    "node_modules",
+    "dist",
+    "build",
+  ]);
+
+  const summaries: PythonTestFileSummary[] = [];
+  const stack = [root];
+
+  while (stack.length > 0) {
+    const dir = stack.pop()!;
+    let entries: fs.Dirent[] = [];
+
+    try {
+      entries = fs.readdirSync(dir, { withFileTypes: true });
+    } catch {
+      continue;
+    }
+
+    for (const entry of entries) {
+      const fullPath = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        if (!ignoreDirs.has(entry.name)) {
+          stack.push(fullPath);
+        }
+        continue;
+      }
+
+      if (!entry.isFile() || !entry.name.toLowerCase().endsWith(".py")) {
+        continue;
+      }
+
+      let code = "";
+      try {
+        code = fs.readFileSync(fullPath, "utf-8");
+      } catch {
+        continue;
+      }
+
+      const matches = [...code.matchAll(/\bdef\s+(test_[A-Za-z0-9_]+)\s*\(/g)];
+      if (matches.length === 0) {
+        continue;
+      }
+
+      const relativePath = path.relative(root, fullPath).replace(/\\/g, "/");
+      summaries.push({ relativePath, testCount: matches.length });
+    }
+  }
+
+  return summaries.sort((a, b) => a.relativePath.localeCompare(b.relativePath));
+}
+
+function outputShowsPytestCollectionFailure(output: string): boolean {
+  return /(error collecting|importerror|modulenotfounderror|during collection|interrupted)/i.test(output);
+}
+
+function extractPytestFailureLine(output: string): string | null {
+  const lines = output.split(/\r?\n/).map((line) => line.trim()).filter((line) => line.length > 0);
+  const interesting = lines.find((line) =>
+    /^ERROR\s+/i.test(line) ||
+    /^FAILED\s+/i.test(line) ||
+    /\bAssertionError\b/.test(line) ||
+    /\bTraceback\b/.test(line)
+  );
+
+  return interesting ? compactFailureLine(interesting) : null;
+}
+
+async function runPytestAttempt(
+  root: string,
+  attempt: PytestCommandAttempt,
+  args: string[]
+): Promise<string> {
+  return execCommand(attempt.cmd, [...attempt.prefixArgs, ...args], root);
+}
+
+async function executePytestWithFallback(root: string): Promise<string> {
+  const attempts = buildPytestCommandAttempts(root);
+
+  let lastOutput = "";
+  let selectedAttempt: PytestCommandAttempt | null = null;
+
+  for (const attempt of attempts) {
+    const output = await runPytestAttempt(root, attempt, ["--version"]);
+    if (!outputSuggestsCommandOrPytestMissing(output)) {
+      selectedAttempt = attempt;
+      break;
+    }
+    lastOutput = output;
+  }
+
+  if (!selectedAttempt) {
+    return lastOutput;
+  }
+
+  const discoveredFiles = discoverPythonTestFiles(root);
+  if (discoveredFiles.length === 0) {
+    return runPytestAttempt(root, selectedAttempt, ["--tb=no", "-q"]);
+  }
+
+  let passed = 0;
+  let failed = 0;
+  let unavailable = 0;
+  const topFailures: string[] = [];
+
+  for (const file of discoveredFiles) {
+    const output = await runPytestAttempt(root, selectedAttempt, ["--tb=no", "-q", file.relativePath]);
+    const parsed = parsePytest(output);
+
+    if (outputShowsPytestCollectionFailure(output)) {
+      failed += file.testCount;
+      const line = extractPytestFailureLine(output);
+      if (line && topFailures.length < 3) {
+        topFailures.push(`${file.relativePath}: ${line}`);
+      }
+      continue;
+    }
+
+    const boundedPassed = Math.min(parsed.passed, file.testCount);
+    const boundedFailed = Math.min(parsed.failed, Math.max(file.testCount - boundedPassed, 0));
+    const remainder = Math.max(file.testCount - boundedPassed - boundedFailed, 0);
+
+    passed += boundedPassed;
+    failed += boundedFailed;
+    unavailable += remainder;
+
+    if (boundedFailed > 0) {
+      const line = extractPytestFailureLine(output);
+      if (line && topFailures.length < 3) {
+        topFailures.push(`${file.relativePath}: ${line}`);
+      }
+    }
+  }
+
+  const total = discoveredFiles.reduce((sum, file) => sum + file.testCount, 0);
+  return JSON.stringify({
+    passed,
+    failed,
+    total,
+    unavailable,
+    top_failures: topFailures,
+  });
+}
+
 export const builtInTestRunners: TestRunner[] = [
   {
     kind: "unity",
@@ -441,9 +670,24 @@ export const builtInTestRunners: TestRunner[] = [
   },
   {
     kind: "pytest",
-    detect: sentinelDetect("pytest", ["pytest.ini", "setup.cfg", "pyproject.toml", "setup.py"]),
-    execute: commandRunner("python", ["-m", "pytest", "--tb=no", "-q"]),
-    parse: parsePytest,
+    detect: detectPythonProject,
+    execute: executePytestWithFallback,
+    parse(output) {
+      try {
+        const parsed = JSON.parse(output) as ParsedTestResult;
+        return {
+          passed: Number(parsed.passed) || 0,
+          failed: Number(parsed.failed) || 0,
+          total: Number(parsed.total) || 0,
+          unavailable: Number(parsed.unavailable) || 0,
+          top_failures: Array.isArray(parsed.top_failures)
+            ? parsed.top_failures.slice(0, 3).map((entry) => compactFailureLine(String(entry)))
+            : [],
+        };
+      } catch {
+        return parsePytest(output);
+      }
+    },
   },
   {
     kind: "cargo",
